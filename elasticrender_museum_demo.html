@@ -27,11 +27,11 @@
   button { color:inherit; }
   .page {
     min-height:100vh;
-    height:100vh;
-    overflow:hidden;
+    height:auto;
+    overflow:visible;
     padding:14px 24px 12px;
     display:grid;
-    grid-template-rows:auto minmax(0,1fr) auto auto;
+    grid-template-rows:auto auto auto auto;
     gap:10px;
     background:
       linear-gradient(90deg,rgba(12,10,8,.32),transparent 24%,transparent 74%,rgba(12,10,8,.28));
@@ -41,7 +41,9 @@
     align-items:center;
     justify-content:space-between;
     gap:28px;
+    min-width:0;
   }
+  .hero-grid > * { min-width:0; }
   .brand {
     display:flex;
     align-items:center;
@@ -64,11 +66,11 @@
 
   .hero-grid {
     display:grid;
-    grid-template-columns:minmax(175px,.42fr) minmax(430px,1152px) minmax(265px,.72fr);
+    grid-template-columns:minmax(175px,.42fr) minmax(0,576px) minmax(265px,.72fr);
     gap:12px;
-    align-items:center;
+    align-items:start;
     min-height:0;
-    height:100%;
+    height:auto;
   }
   .intro {
     align-self:center;
@@ -87,10 +89,10 @@
 
   .viewer-card {
     position:relative;
-    width:min(1152px, 100%);
-    aspect-ratio:2/1;
-    max-width:1152px;
-    max-height:none;
+    width:min(576px, 100%);
+    aspect-ratio:1/1;
+    max-width:576px;
+    max-height:576px;
     min-height:0;
     border-radius:18px;
     overflow:hidden;
@@ -105,7 +107,7 @@
     width:100%;
     height:100%;
     display:block;
-    object-fit:fill;
+    object-fit:contain;
     background:#0c0d0f;
   }
   .viewer-overlay {
@@ -131,6 +133,7 @@
   }
   .icon-btn:hover { background:rgba(35,36,39,.86); }
   .icon-btn.active { border-color:var(--gold);color:var(--gold);background:rgba(75,55,22,.78); }
+  .mobile-pad { display:none; }
 
   .info-card {
     align-self:stretch;
@@ -203,7 +206,7 @@
 
   @media (max-width:1100px) {
     .page { padding:22px; }
-    .hero-grid { grid-template-columns:1fr 320px; }
+    .hero-grid { grid-template-columns:minmax(0,1fr) minmax(260px,320px); }
     .intro { grid-column:1/-1;padding:0;display:flex;align-items:end;gap:25px; }
     .intro h1 { max-width:520px;margin-bottom:0; }
     .intro .intro-copy { max-width:360px; }
@@ -214,8 +217,32 @@
     nav { display:none; }
     .hero-grid { grid-template-columns:1fr; }
     .intro { display:block; }
-    .viewer-card { min-height:280px; }
+    .viewer-card { width:100%;max-width:576px;min-height:0;justify-self:center; }
     .info-card { min-height:auto; }
+    .interaction-hint { display:none; }
+    .viewer-top,.viewer-bottom { padding:10px; }
+    #frameMode { display:none; }
+    .viewer-actions .icon-btn { width:42px;height:42px; }
+    .mobile-pad {
+      pointer-events:auto;
+      display:grid;
+      grid-template-columns:repeat(3,44px);
+      grid-template-rows:repeat(2,44px);
+      gap:5px;
+      margin:0 10px 10px;
+      align-self:flex-start;
+    }
+    .mobile-pad button {
+      width:44px;height:44px;padding:0;border:1px solid rgba(255,255,255,.25);
+      border-radius:10px;background:rgba(17,18,21,.78);color:#fff;font-size:18px;
+      touch-action:none;
+    }
+    .mobile-pad button:active { background:rgba(75,55,22,.88);border-color:var(--gold); }
+    .mobile-pad [data-key="KeyW"] { grid-column:2;grid-row:1; }
+    .mobile-pad [data-key="KeyA"] { grid-column:1;grid-row:2; }
+    .mobile-pad [data-key="KeyS"] { grid-column:2;grid-row:2; }
+    .mobile-pad [data-key="KeyD"] { grid-column:3;grid-row:2; }
+    .viewer-card { touch-action:none; }
     footer { flex-direction:column;align-items:flex-start; }
   }
 </style>
@@ -257,6 +284,12 @@
         </div>
         <div class="viewer-bottom">
           <span class="pill" id="frameMode">Async · 30 FPS cap</span>
+          <div class="mobile-pad" aria-label="Mobile movement controls">
+            <button type="button" data-key="KeyW" aria-label="Move forward">▲</button>
+            <button type="button" data-key="KeyA" aria-label="Move left">◀</button>
+            <button type="button" data-key="KeyS" aria-label="Move backward">▼</button>
+            <button type="button" data-key="KeyD" aria-label="Move right">▶</button>
+          </div>
           <div class="viewer-actions">
             <button class="icon-btn" id="resetView" title="Reset view" aria-label="Reset view">↺</button>
             <button class="icon-btn" id="orbitView" title="Orbit object" aria-label="Orbit object">◎</button>
@@ -306,6 +339,7 @@
 const lambdaUrl = 'https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
 const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
+const RENDER_ASPECT = 576 / 576;
 
 // Catalogue metadata matched to the ten meshes used by scenes 1001–1010.
 const artifacts = [
@@ -340,6 +374,10 @@ const artifactDescription = document.getElementById('artifactDescription');
 
 let sceneIndex = 1;
 let active = false;
+let mobileMoving = false;
+let touchLookId = null;
+let touchLookX = 0;
+let touchLookY = 0;
 let keys = new Set();
 let position = [0,0,1];
 let yaw = -Math.PI/2;
@@ -360,7 +398,7 @@ const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
 const norm=a=>{const n=Math.hypot(...a);return a.map(x=>x/n)};
 
 function matrix() {
-  const aspect=2, fy=1/Math.tan(Math.PI/6), fx=fy/aspect;
+  const aspect=RENDER_ASPECT, fy=1/Math.tan(Math.PI/6), fx=fy/aspect;
   const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]);
   const r=norm(cross(f,[0,1,0])), u=cross(r,f);
   const v=[
@@ -378,7 +416,7 @@ function matrix() {
 }
 
 function applyCameraMatrix(cameraMatrix) {
-  const aspect=2,fy=1/Math.tan(Math.PI/6),fx=fy/aspect;
+  const aspect=RENDER_ASPECT,fy=1/Math.tan(Math.PI/6),fx=fy/aspect;
   const right=cameraMatrix.slice(0,3).map(x=>x/fx);
   const up=cameraMatrix.slice(4,7).map(x=>x/fy);
   const back=cameraMatrix.slice(12,15).map(x=>-x);
@@ -451,7 +489,7 @@ function noteMovement() {
 }
 
 function isMoving() {
-  return !orbiting && active && keys.size>0;
+  return !orbiting && (active || mobileMoving) && keys.size>0;
 }
 
 function asyncTick() {
@@ -544,6 +582,11 @@ pitch=0;
 
 view.addEventListener('mousedown',event=>{
   if(event.target.closest('button')) return;
+  if(event.button===2){
+    event.preventDefault();
+    if(document.pointerLockElement===view) document.exitPointerLock();
+    return;
+  }
   if(event.button===0){
     view.requestPointerLock();
   }
@@ -554,6 +597,39 @@ view.addEventListener('contextmenu',event=>{
     document.exitPointerLock();
   }
 });
+view.addEventListener('touchstart',event=>{
+  if(event.target.closest('button') || touchLookId!==null) return;
+  const touch=event.changedTouches[0];
+  if(!touch) return;
+  event.preventDefault();
+  touchLookId=touch.identifier;
+  touchLookX=touch.clientX;
+  touchLookY=touch.clientY;
+  active=true;
+  statusEl.textContent=`Scene ${sceneIndex} · touch look active`;
+  noteMovement();
+},{passive:false});
+view.addEventListener('touchmove',event=>{
+  if(touchLookId===null) return;
+  const touch=[...event.changedTouches].find(item=>item.identifier===touchLookId);
+  if(!touch) return;
+  event.preventDefault();
+  yaw+=(touch.clientX-touchLookX)*.004;
+  pitch=Math.max(-1.54,Math.min(1.54,pitch-(touch.clientY-touchLookY)*.004));
+  touchLookX=touch.clientX;
+  touchLookY=touch.clientY;
+  noteMovement();
+},{passive:false});
+function endTouchLook(event){
+  if(touchLookId===null) return;
+  const ended=[...event.changedTouches].some(item=>item.identifier===touchLookId);
+  if(!ended) return;
+  touchLookId=null;
+  active=false;
+  statusEl.textContent=`Scene ${sceneIndex} · touch look released`;
+}
+view.addEventListener('touchend',endTouchLook,{passive:false});
+view.addEventListener('touchcancel',endTouchLook,{passive:false});
 document.addEventListener('pointerlockchange',()=>{
   active=document.pointerLockElement===view;
   statusEl.textContent=active?`Scene ${sceneIndex} · free look active`:`Scene ${sceneIndex} · free look released`;
@@ -577,6 +653,26 @@ document.addEventListener('keydown',event=>{
   }
 });
 document.addEventListener('keyup',event=>keys.delete(event.code));
+
+document.querySelectorAll('.mobile-pad button').forEach(button=>{
+  const key=button.dataset.key;
+  const press=event=>{
+    event.preventDefault();
+    mobileMoving=true;
+    keys.add(key);
+    noteMovement();
+    button.setPointerCapture?.(event.pointerId);
+  };
+  const release=event=>{
+    event.preventDefault();
+    keys.delete(key);
+    mobileMoving=[...keys].some(item=>item.startsWith('Key'));
+  };
+  button.addEventListener('pointerdown',press);
+  button.addEventListener('pointerup',release);
+  button.addEventListener('pointercancel',release);
+  button.addEventListener('pointerleave',event=>{ if(event.buttons===0) release(event); });
+});
 
 document.getElementById('resetView').addEventListener('click',event=>{
   event.stopPropagation();
