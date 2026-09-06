@@ -189,6 +189,44 @@
   .artifact-title { display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
   .artifact-scene { color:#cbbfae;font-size:10px;margin-top:2px; }
 
+  .content-section {
+    width:min(1120px,100%);
+    margin:16px auto 0;
+    padding:30px;
+    border-radius:18px;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(16px);
+    scroll-margin-top:18px;
+  }
+  .section-heading { max-width:780px; }
+  .section-heading h2 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:clamp(26px,3vw,42px);font-weight:400;line-height:1.1;margin:0 0 14px;
+  }
+  .section-heading p { color:#efe7dc;line-height:1.6;margin:0 0 14px; }
+  .technology-grid {
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px;
+  }
+  .technology-grid article {
+    padding:18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.045);
+  }
+  .technology-grid h3 { margin:0 0 8px;font-family:Georgia,"Times New Roman",serif;font-size:20px;font-weight:400; }
+  .technology-grid p { color:var(--muted);line-height:1.55;margin:0;font-size:14px; }
+  .contact-form { display:grid;gap:14px;max-width:620px;margin-top:22px; }
+  .contact-form label { display:grid;gap:6px;color:var(--muted);font-size:13px; }
+  .contact-form input,.contact-form textarea {
+    width:100%;padding:11px 12px;border:1px solid rgba(255,255,255,.2);border-radius:8px;
+    background:rgba(0,0,0,.2);color:var(--ink);resize:vertical;
+  }
+  .contact-form input:focus,.contact-form textarea:focus { outline:2px solid rgba(230,184,92,.7);outline-offset:1px; }
+  .contact-form button {
+    justify-self:start;padding:10px 18px;border:1px solid rgba(230,184,92,.65);border-radius:8px;
+    background:rgba(75,55,22,.82);cursor:pointer;
+  }
+  .contact-form button:hover { background:rgba(100,72,25,.9); }
+
   footer {
     display:flex;justify-content:space-between;align-items:center;gap:20px;
     font-size:12px;color:#eee;text-shadow:0 1px 8px rgba(0,0,0,.65);
@@ -233,6 +271,8 @@
     .carousel-wrap { order:3; }
     .info-card { min-height:auto; }
     .info-card { order:4; }
+    .content-section { order:6;margin-top:10px;padding:20px; }
+    .technology-grid { grid-template-columns:1fr; }
     .interaction-hint { display:none; }
     .viewer-top,.viewer-bottom { padding:10px; }
     #frameMode { display:none; }
@@ -257,7 +297,7 @@
     .mobile-pad [data-key="KeyS"] { grid-column:2;grid-row:2; }
     .mobile-pad [data-key="KeyD"] { grid-column:3;grid-row:2; }
     .viewer-card { touch-action:none; }
-    footer { order:5;flex-direction:column;align-items:flex-start; }
+    footer { order:7;flex-direction:column;align-items:flex-start; }
   }
 </style>
 </head>
@@ -272,13 +312,14 @@
       </div>
     </div>
     <nav aria-label="Primary">
-      <a class="active" href="#">Collection</a>
+      <a class="active" href="#collection">Collection</a>
       <a href="#about">About</a>
       <a href="#technology">Technology</a>
+      <a href="#contact">Contact</a>
     </nav>
   </header>
 
-  <main class="hero-grid">
+  <main class="hero-grid" id="collection">
     <section class="intro">
       <div>
         <h1>Extraordinary objects.<br>Rendered on demand.</h1>
@@ -293,7 +334,7 @@
       <img id="image" alt="ElasticRender rendered frame">
       <div class="viewer-overlay">
         <div class="viewer-top">
-          <span class="pill" id="status">Loading scene 1…</span>
+          <span class="pill" id="status">Scene 1 · — FPS</span>
           <span class="pill interaction-hint">Left-click view · mouse look · WASD · right-click release</span>
         </div>
         <div class="viewer-bottom">
@@ -340,6 +381,51 @@
 
   <section class="carousel-wrap" aria-label="Artefact selection">
     <div class="carousel" id="carousel"></div>
+  </section>
+
+  <section class="content-section" id="about">
+    <div class="section-heading">
+      <div class="eyebrow">About ElasticRender</div>
+      <h2>Deploy the visualisation, not a permanently idle render farm.</h2>
+      <p>ElasticRender makes large, visually rich 3D datasets available through an ordinary web experience, with rendering capacity created when people are actively exploring.</p>
+    </div>
+    <div class="technology-grid">
+      <article>
+        <h3>On-demand capacity</h3>
+        <p>Rendering resources respond to demand, making interactive applications practical when usage is intermittent, bursty or difficult to predict.</p>
+      </article>
+      <article>
+        <h3>Large assets stay close to compute</h3>
+        <p>Complex collections can remain server-side instead of requiring every visitor to download and process the complete dataset locally.</p>
+      </article>
+      <article>
+        <h3>Thin-client experience</h3>
+        <p>The browser handles interaction and presentation while rendered views are produced remotely, reducing dependence on the visitor’s graphics hardware.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="content-section contact-section" id="technology">
+    <div class="section-heading">
+      <div class="eyebrow">Technology</div>
+      <h2>Interactive access to demanding 3D collections.</h2>
+      <p>ElasticRender supports curated scenes and individual objects, responsive frames while a view is moving, and higher-quality frames when someone stops to inspect a result. It can complement provisioned rendering for sustained workloads while absorbing occasional demand without a permanently running renderer.</p>
+      <p>The approach is suited to museums and cultural heritage, photogrammetry, surveying and geospatial visualisation, engineering and infrastructure, digital twins, architecture and remote inspection.</p>
+    </div>
+  </section>
+
+  <section class="content-section contact-section" id="contact">
+    <div class="section-heading">
+      <div class="eyebrow">Contact</div>
+      <h2>Discuss an interactive 3D project.</h2>
+      <p>Send a message and we’ll get back to you.</p>
+    </div>
+    <form class="contact-form" action="mailto:chris@hallamsolutions.io" method="post" enctype="text/plain">
+      <label>Name<input name="name" type="text" autocomplete="name" required></label>
+      <label>Email<input name="email" type="email" autocomplete="email" required></label>
+      <label>Message<textarea name="message" rows="5" required></textarea></label>
+      <button type="submit">Email Chris</button>
+    </form>
   </section>
 
   <footer>
@@ -406,6 +492,7 @@ let displayedId = 0;
 let motionQueued = false;
 let settlingFrames = 0;
 const receivedFrames = [];
+let lastFrameReceivedAt = 0;
 
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -442,8 +529,12 @@ function applyCameraMatrix(cameraMatrix) {
 }
 
 function recordFrameReceived() {
-  receivedFrames.push(performance.now());
-  if(receivedFrames.length>5) receivedFrames.shift();
+  const now=performance.now();
+  // Do not average an idle period into the active rendering cadence.
+  if(lastFrameReceivedAt && now-lastFrameReceivedAt>500) receivedFrames.length=0;
+  receivedFrames.push(now);
+  lastFrameReceivedAt=now;
+  if(receivedFrames.length>10) receivedFrames.shift();
 }
 
 function updateTelemetry() {
@@ -454,9 +545,16 @@ function updateTelemetry() {
   const now=performance.now(), last=receivedFrames.at(-1);
   const age=((now-last)/1000).toFixed(2);
   let average='—';
+  let interval='—';
+  let fps='—';
   if(receivedFrames.length>1)
     average=`${Math.round((last-receivedFrames[0])/(receivedFrames.length-1))} ms`;
-  telemetryEl.textContent=`Client: async, 30 FPS cap · Last frame received: ${age} s ago · ${receivedFrames.length}-frame receive average: ${average}`;
+  if(receivedFrames.length>1) {
+    const delta=last-receivedFrames[receivedFrames.length-2];
+    interval=`${Math.round(delta)} ms`;
+    fps=`${(1000/delta).toFixed(1)}`;
+  }
+  telemetryEl.textContent=`Client: async, 30 FPS cap · Last frame received: ${age} s ago · Current interval: ${interval} (${fps} FPS) · ${receivedFrames.length}-frame receive average: ${average}`;
 }
 setInterval(updateTelemetry,100);
 
@@ -474,8 +572,7 @@ function updateRenderTelemetry(headers) {
 }
 
 async function issueRender(cameraMatrix) {
-  const id=++requestId, started=performance.now();
-  statusEl.textContent=`Rendering scene ${sceneIndex}… (${requestId-displayedId} in flight)`;
+  const id=++requestId;
   try {
     const response=await fetch(lambdaUrl,{
       method:'POST',
@@ -491,7 +588,12 @@ async function issueRender(cameraMatrix) {
       if(lastImageUrl) URL.revokeObjectURL(lastImageUrl);
       lastImageUrl=URL.createObjectURL(jpeg);
       image.src=lastImageUrl;
-      statusEl.textContent=`Scene ${sceneIndex} · frame ${id} · ${Math.round(performance.now()-started)} ms`;
+      let frameTiming='— FPS';
+      if(receivedFrames.length>1) {
+        const averageInterval=(receivedFrames.at(-1)-receivedFrames[0])/(receivedFrames.length-1);
+        frameTiming=`${(1000/averageInterval).toFixed(1)} FPS`;
+      }
+      statusEl.textContent=`Scene ${sceneIndex} · ${frameTiming}`;
     }
   } catch(error) {
     statusEl.textContent=error.message;
