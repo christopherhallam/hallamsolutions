@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ElasticRender — Interactive Museum Demo</title>
+<style>
+  :root {
+    --ink:#f6f0e5;
+    --muted:#d9d0c0;
+    --gold:#e6b85c;
+    --panel:rgba(20,20,22,.78);
+    --panel2:rgba(12,12,14,.70);
+    --line:rgba(255,255,255,.16);
+    --shadow:0 20px 60px rgba(0,0,0,.34);
+  }
+  * { box-sizing:border-box; }
+  html,body { min-height:100%; margin:0; }
+  body {
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(rgba(12,10,9,.24),rgba(12,10,9,.48)),
+      url("assets/britishmuseum.jpg") center/cover fixed;
+  }
+  button,input { font:inherit; }
+  button { color:inherit; }
+  .page {
+    min-height:100vh;
+    height:100vh;
+    overflow:hidden;
+    padding:14px 24px 12px;
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr) auto auto;
+    gap:10px;
+    background:
+      linear-gradient(90deg,rgba(12,10,8,.32),transparent 24%,transparent 74%,rgba(12,10,8,.28));
+  }
+  header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:28px;
+  }
+  .brand {
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  .brand-mark {
+    width:36px;height:36px;border:1px solid rgba(255,255,255,.45);
+    border-radius:10px;display:grid;place-items:center;background:rgba(15,15,17,.34);
+    backdrop-filter:blur(12px);font-weight:700;letter-spacing:-.05em;
+  }
+  .brand-name {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:25px;line-height:1;letter-spacing:.01em;
+  }
+  .brand-name strong { font-weight:700; }
+  .tagline { color:var(--muted);font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-top:6px; }
+  nav { display:flex;gap:22px;font-family:Georgia,"Times New Roman",serif;font-size:15px; }
+  nav a { color:var(--ink);text-decoration:none;opacity:.92; }
+  nav a.active { border-bottom:2px solid var(--gold);padding-bottom:8px; }
+
+  .hero-grid {
+    display:grid;
+    grid-template-columns:minmax(175px,.42fr) minmax(430px,1152px) minmax(265px,.72fr);
+    gap:12px;
+    align-items:center;
+    min-height:0;
+    height:100%;
+  }
+  .intro {
+    align-self:center;
+    padding:0 6px;
+    text-shadow:0 2px 18px rgba(0,0,0,.4);
+  }
+  .intro h1 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;
+    font-size:clamp(30px,3vw,50px);
+    line-height:1.04;
+    margin:0 0 22px;
+  }
+  .rule { width:62px;height:3px;background:var(--gold);margin:0 0 20px; }
+  .intro p { max-width:300px;line-height:1.55;color:#f0e7da;margin:0; }
+
+  .viewer-card {
+    position:relative;
+    width:min(1152px, 100%);
+    aspect-ratio:2/1;
+    max-width:1152px;
+    max-height:none;
+    min-height:0;
+    border-radius:18px;
+    overflow:hidden;
+    background:rgba(8,9,11,.88);
+    border:1px solid rgba(255,255,255,.28);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(8px);
+    cursor:crosshair;
+    user-select:none;
+  }
+  #image {
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:fill;
+    background:#0c0d0f;
+  }
+  .viewer-overlay {
+    position:absolute;inset:0;pointer-events:none;
+    display:flex;flex-direction:column;justify-content:space-between;
+    background:linear-gradient(180deg,rgba(0,0,0,.20),transparent 22%,transparent 72%,rgba(0,0,0,.42));
+  }
+  .viewer-top,.viewer-bottom {
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 16px;
+  }
+  .pill {
+    padding:8px 11px;border-radius:999px;background:rgba(17,18,21,.68);
+    border:1px solid rgba(255,255,255,.20);font-size:12px;color:#eee;
+    backdrop-filter:blur(8px);
+  }
+  #status { white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%; }
+  .interaction-hint { color:#eee;opacity:.88; }
+  .viewer-actions { pointer-events:auto;display:flex;gap:8px; }
+  .icon-btn {
+    width:38px;height:38px;border:1px solid rgba(255,255,255,.22);
+    background:rgba(17,18,21,.72);border-radius:10px;cursor:pointer;
+  }
+  .icon-btn:hover { background:rgba(35,36,39,.86); }
+  .icon-btn.active { border-color:var(--gold);color:var(--gold);background:rgba(75,55,22,.78); }
+
+  .info-card {
+    align-self:stretch;
+    border-radius:18px;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(16px);
+    padding:20px 20px;
+    display:flex;flex-direction:column;
+    min-height:280px;
+  }
+  .eyebrow { color:var(--gold);font-size:11px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:10px; }
+  .info-card h2 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:31px;font-weight:400;line-height:1.1;margin:0 0 13px;
+  }
+  .meta { color:#eee;line-height:1.55;margin-bottom:16px; }
+  .info-card .rule { width:56px;height:2px;margin:0 0 18px; }
+  .description { color:#efe7dc;line-height:1.58;margin:0 0 20px; }
+  .controls {
+    margin-top:auto;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:13px;line-height:1.55;
+  }
+  kbd {
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);
+    border-radius:5px;padding:2px 5px;color:#fff;
+  }
+
+  .carousel-wrap {
+    border-radius:14px;background:rgba(17,14,12,.72);
+    border:1px solid rgba(255,255,255,.15);
+    box-shadow:var(--shadow);backdrop-filter:blur(12px);
+    padding:8px;
+  }
+  .carousel {
+    display:grid;
+    grid-template-columns:repeat(10,minmax(105px,1fr));
+    gap:10px;
+    overflow-x:auto;
+    scrollbar-width:thin;
+  }
+  .artifact {
+    min-width:88px;border:1px solid transparent;background:rgba(255,255,255,.055);
+    border-radius:12px;padding:7px;cursor:pointer;text-align:left;transition:.15s ease;
+  }
+  .artifact:hover { transform:translateY(-2px);background:rgba(255,255,255,.09); }
+  .artifact.active { border-color:var(--gold);box-shadow:0 0 0 1px rgba(230,184,92,.18) inset; }
+  .artifact img {
+    width:100%;aspect-ratio:2/1;display:block;object-fit:cover;border-radius:7px;max-height:72px;
+    background:#202124;margin-bottom:7px;
+  }
+  .artifact-title { display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .artifact-scene { color:#cbbfae;font-size:10px;margin-top:2px; }
+
+  footer {
+    display:flex;justify-content:space-between;align-items:center;gap:20px;
+    font-size:12px;color:#eee;text-shadow:0 1px 8px rgba(0,0,0,.65);
+  }
+  .powered { display:flex;align-items:center;gap:9px; }
+  .lambda-dot { width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 18px rgba(230,184,92,.9); }
+  details {
+    margin-top:12px;color:#ccc;font-size:12px;
+  }
+  details summary { cursor:pointer;color:#ddd; }
+  .debug {
+    margin-top:8px;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,.28);
+    border:1px solid rgba(255,255,255,.09);line-height:1.55;overflow:auto;
+  }
+
+  @media (max-width:1100px) {
+    .page { padding:22px; }
+    .hero-grid { grid-template-columns:1fr 320px; }
+    .intro { grid-column:1/-1;padding:0;display:flex;align-items:end;gap:25px; }
+    .intro h1 { max-width:520px;margin-bottom:0; }
+    .intro .intro-copy { max-width:360px; }
+    .intro .rule { display:none; }
+  }
+  @media (max-width:780px) {
+    .page { padding:16px; }
+    nav { display:none; }
+    .hero-grid { grid-template-columns:1fr; }
+    .intro { display:block; }
+    .viewer-card { min-height:280px; }
+    .info-card { min-height:auto; }
+    footer { flex-direction:column;align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">ER</div>
+      <div>
+        <div class="brand-name"><strong>Elastic</strong>Render</div>
+        <div class="tagline">On-demand interactive rendering</div>
+      </div>
+    </div>
+    <nav aria-label="Primary">
+      <a class="active" href="#">Collection</a>
+      <a href="#about">About</a>
+      <a href="#technology">Technology</a>
+    </nav>
+  </header>
+
+  <main class="hero-grid">
+    <section class="intro">
+      <div>
+        <h1>Extraordinary objects.<br>Rendered on demand.</h1>
+        <div class="rule"></div>
+      </div>
+      <div class="intro-copy">
+        <p>Explore real-world artefacts in interactive 3D. Rendering capacity is created only when you use it.</p>
+      </div>
+    </section>
+
+    <section class="viewer-card" id="view" aria-label="Interactive rendered view">
+      <img id="image" alt="ElasticRender rendered frame">
+      <div class="viewer-overlay">
+        <div class="viewer-top">
+          <span class="pill" id="status">Loading scene 1…</span>
+          <span class="pill interaction-hint">Left-click view · mouse look · WASD · right-click release</span>
+        </div>
+        <div class="viewer-bottom">
+          <span class="pill" id="frameMode">Async · 30 FPS cap</span>
+          <div class="viewer-actions">
+            <button class="icon-btn" id="resetView" title="Reset view" aria-label="Reset view">↺</button>
+            <button class="icon-btn" id="orbitView" title="Orbit object" aria-label="Orbit object">◎</button>
+            <button class="icon-btn" id="fullscreen" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="info-card">
+      <div class="eyebrow">Interactive collection</div>
+      <h2 id="artifactName">Artefact 01</h2>
+      <div class="meta" id="artifactMeta">Scene 1 · 3D model</div>
+      <div class="rule"></div>
+      <p class="description" id="artifactDescription">
+        Placeholder catalogue information for model 1. Replace this with the object's title,
+        period, provenance and interpretation text.
+      </p>
+      <div class="controls">
+        Left-click the render to enter free-look mode. Use
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move,
+        move the mouse to look around, hold <kbd>Shift</kbd> for slow movement,
+        and right-click to release free-look.
+        <details>
+          <summary>ElasticRender telemetry</summary>
+          <div class="debug">
+            <div id="telemetry">Client: async, 30 FPS cap · Last frame received: —</div>
+            <div id="render-telemetry">Renderer telemetry: —</div>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </main>
+
+  <section class="carousel-wrap" aria-label="Artefact selection">
+    <div class="carousel" id="carousel"></div>
+  </section>
+
+  <footer>
+    <span>Interactive collection prototype</span>
+    <span class="powered"><span class="lambda-dot"></span>Powered by <strong>ElasticRender</strong> · AWS Lambda</span>
+  </footer>
+</div>
+
+<script>
+// Existing Lambda Function URL from the supplied demo.
+const lambdaUrl = 'https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
+const ASYNC_FPS = 30;
+const MOVE_SPEED = 2;
+
+// Catalogue metadata matched to the ten meshes used by scenes 1001–1010.
+const artifacts = [
+  {sceneIndex:1,title:'The Rosetta Stone',meta:'British Museum',description:'The Rosetta Stone, a granodiorite stele discovered at Rashid (Rosetta), carries the same decree in three scripts and was instrumental in deciphering Egyptian hieroglyphs.'},
+  {sceneIndex:2,title:'A beserker from the Lewis chessmen',meta:'Lewis chessmen · c. 1150–1175 AD',description:'Walrus-ivory chess-piece depicting a warder in a long garment, scabbard and hood, armed with a sword and shield.'},
+  {sceneIndex:3,title:'A bishop from the Lewis chessmen',meta:'Lewis chessmen · c. 1150–1175 AD',description:'Walrus-ivory bishop standing in a cope with stole and mitre, holding a crozier and book.'},
+  {sceneIndex:4,title:'A Bronze Age Sussex Loop Bracelet',meta:'Sussex · 1400–1200 BC',description:'Middle Bronze Age loop bracelet from Sussex, UK, recorded as British Museum object 1903,6-25.2.'},
+  {sceneIndex:5,title:'A Bronze Age Sussex Loop Bracelet',meta:'Sussex · 1400–1200 BC',description:'Middle Bronze Age loop bracelet from Sussex, UK, recorded as British Museum object 1903,6-25.1.'},
+  {sceneIndex:6,title:'A bust of Demosthenes',meta:'Roman marble copy',description:'Marble head of Demosthenes with knitted brow and compressed lips, a Roman copy of a statue by Polyeuktos erected in 280 BC.'},
+  {sceneIndex:7,title:'A bust of Gaius Caesar',meta:'Roman marble · c. 2 BC–AD 4',description:"Roman marble portrait head of Gaius Caesar, Augustus' grandson, who died while campaigning in Parthia."},
+  {sceneIndex:8,title:'A bust of Livia',meta:'Marble portrait',description:'A scanned marble head of Livia, displayed in gallery G70 at the British Museum.'},
+  {sceneIndex:9,title:'A draughts-piece from the Lewis Chessmen',meta:'Lewis chessmen · 1150–1175 AD',description:'Ivory draughts-piece, carved in a discoid form with two incised concentric circles around its edge.'},
+  {sceneIndex:10,title:'A king from the Lewis chessmen',meta:'Lewis chessmen · c. 1150–1200 AD',description:'Walrus-ivory king seated on a high-backed chair, wearing a floriated crown, mantle, brooch and tunic, with a sheathed sword across his knees.'}
+];
+
+const cameras = {
+  camera1:[.974174,0,-.014282,-.055994,-.004531,1.704247,-.309066,-.067883,0,0,0,.01,-.014424,-.178459,-.983842,.563640],
+  camera2:[.650398,0,-.725397,.040743,.161630,1.718393,.144919,-.236218,0,0,0,.01,-.738677,.125334,-.662305,.315036],
+  camera3:[-.698965,0,-.678724,.062357,-1.152657,.512186,1.187032,-.085197,0,0,0,.01,-.206005,-.955277,.212149,.460692],
+  camera4:[.924031,0,-.308846,-.045320,-.189948,1.625100,-.568304,-.306057,0,0,0,.01,-.297425,-.345953,-.889862,.112355]
+};
+
+const statusEl = document.getElementById('status');
+const telemetryEl = document.getElementById('telemetry');
+const renderTelemetryEl = document.getElementById('render-telemetry');
+const image = document.getElementById('image');
+const view = document.getElementById('view');
+const carousel = document.getElementById('carousel');
+const artifactName = document.getElementById('artifactName');
+const artifactMeta = document.getElementById('artifactMeta');
+const artifactDescription = document.getElementById('artifactDescription');
+
+let sceneIndex = 1;
+let active = false;
+let keys = new Set();
+let position = [0,0,1];
+let yaw = -Math.PI/2;
+let pitch = 0;
+let orbiting = false;
+let orbitAngle = 0;
+const orbitRadius = 1;
+let lastMove = performance.now();
+let lastImageUrl = null;
+let requestId = 0;
+let displayedId = 0;
+let motionQueued = false;
+let settlingFrames = 0;
+const receivedFrames = [];
+
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>{const n=Math.hypot(...a);return a.map(x=>x/n)};
+
+function matrix() {
+  const aspect=2, fy=1/Math.tan(Math.PI/6), fx=fy/aspect;
+  const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]);
+  const r=norm(cross(f,[0,1,0])), u=cross(r,f);
+  const v=[
+    r[0],r[1],r[2],-dot(r,position),
+    u[0],u[1],u[2],-dot(u,position),
+    -f[0],-f[1],-f[2],dot(f,position),
+    0,0,0,1
+  ];
+  return [
+    fx*v[0],fx*v[1],fx*v[2],fx*v[3],
+    fy*v[4],fy*v[5],fy*v[6],fy*v[7],
+    .01*v[12],.01*v[13],.01*v[14],.01*v[15],
+    -v[8],-v[9],-v[10],-v[11]
+  ];
+}
+
+function applyCameraMatrix(cameraMatrix) {
+  const aspect=2,fy=1/Math.tan(Math.PI/6),fx=fy/aspect;
+  const right=cameraMatrix.slice(0,3).map(x=>x/fx);
+  const up=cameraMatrix.slice(4,7).map(x=>x/fy);
+  const back=cameraMatrix.slice(12,15).map(x=>-x);
+  const translation=[cameraMatrix[3]/fx,cameraMatrix[7]/fy,-cameraMatrix[15]];
+  position=[0,1,2].map(i=>-right[i]*translation[0]-up[i]*translation[1]-back[i]*translation[2]);
+  const forward=back.map(x=>-x);
+  yaw=Math.atan2(forward[2],forward[0]);
+  pitch=Math.asin(Math.max(-1,Math.min(1,forward[1])));
+}
+
+function recordFrameReceived() {
+  receivedFrames.push(performance.now());
+  if(receivedFrames.length>5) receivedFrames.shift();
+}
+
+function updateTelemetry() {
+  if(!receivedFrames.length) {
+    telemetryEl.textContent='Client: async, 30 FPS cap · Last frame received: —';
+    return;
+  }
+  const now=performance.now(), last=receivedFrames.at(-1);
+  const age=((now-last)/1000).toFixed(2);
+  let average='—';
+  if(receivedFrames.length>1)
+    average=`${Math.round((last-receivedFrames[0])/(receivedFrames.length-1))} ms`;
+  telemetryEl.textContent=`Client: async, 30 FPS cap · Last frame received: ${age} s ago · ${receivedFrames.length}-frame receive average: ${average}`;
+}
+setInterval(updateTelemetry,100);
+
+function updateRenderTelemetry(headers) {
+  const value=name=>headers.get(name);
+  const render=value('X-Render-Ms'),
+        raster=value('X-Raster-Ms'),
+        jpeg=value('X-Jpeg-Encode-Ms'),
+        base64=value('X-Base64-Encode-Ms'),
+        message=value('X-Message-Create-Ms'),
+        bytes=value('X-Jpeg-Bytes');
+  if(!render) return;
+  renderTelemetryEl.textContent =
+    `Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
+}
+
+async function issueRender(cameraMatrix) {
+  const id=++requestId, started=performance.now();
+  statusEl.textContent=`Rendering scene ${sceneIndex}… (${requestId-displayedId} in flight)`;
+  try {
+    const response=await fetch(lambdaUrl,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sceneIndex,cameraMatrix})
+    });
+    if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
+    updateRenderTelemetry(response.headers);
+    const jpeg=await response.blob();
+    recordFrameReceived();
+    if(id>=displayedId) {
+      displayedId=id;
+      if(lastImageUrl) URL.revokeObjectURL(lastImageUrl);
+      lastImageUrl=URL.createObjectURL(jpeg);
+      image.src=lastImageUrl;
+      statusEl.textContent=`Scene ${sceneIndex} · frame ${id} · ${Math.round(performance.now()-started)} ms`;
+    }
+  } catch(error) {
+    statusEl.textContent=error.message;
+  }
+}
+
+function noteMovement() {
+  motionQueued=true;
+}
+
+function isMoving() {
+  return !orbiting && active && keys.size>0;
+}
+
+function asyncTick() {
+  if(isMoving() || motionQueued) {
+    motionQueued=false;
+    settlingFrames=2;
+    issueRender(matrix());
+  } else if(settlingFrames>0) {
+    settlingFrames--;
+    issueRender(matrix());
+  }
+  setTimeout(asyncTick,1000/ASYNC_FPS);
+}
+asyncTick();
+
+function tick(now) {
+  const dt=Math.min(.05,(now-lastMove)/1000);
+  lastMove=now;
+  if(orbiting) {
+    orbitAngle=(orbitAngle+dt*0.8)%(Math.PI*2);
+    position=[Math.sin(orbitAngle)*orbitRadius,0,Math.cos(orbitAngle)*orbitRadius];
+    const forward=norm([-position[0],0,-position[2]]);
+    yaw=Math.atan2(forward[2],forward[0]);
+    pitch=0;
+    motionQueued=true;
+  }
+  if(isMoving()) {
+    const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]);
+    const r=norm(cross(f,[0,1,0]));
+    const speed=MOVE_SPEED*(keys.has('ShiftLeft')||keys.has('ShiftRight')?.1:1);
+    if(keys.has('KeyW')) position=position.map((x,i)=>x+f[i]*speed*dt);
+    if(keys.has('KeyS')) position=position.map((x,i)=>x-f[i]*speed*dt);
+    if(keys.has('KeyD')) position=position.map((x,i)=>x+r[i]*speed*dt);
+    if(keys.has('KeyA')) position=position.map((x,i)=>x-r[i]*speed*dt);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function placeholderThumb(index) {
+  const hue = 24 + index*17;
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 22% 28%)"/>
+        <stop offset="1" stop-color="hsl(${hue+28} 16% 10%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="300" fill="url(#g)"/>
+    <circle cx="200" cy="118" r="${42+(index%3)*10}" fill="rgba(238,226,205,.72)"/>
+    <rect x="145" y="164" width="110" height="70" rx="14" fill="rgba(238,226,205,.62)"/>
+    <text x="200" y="272" text-anchor="middle" font-family="Arial" font-size="27" fill="#fff">MODEL ${index}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function selectArtifact(index) {
+  sceneIndex=index;
+  orbiting=false;
+  document.getElementById('orbitView').classList.remove('active');
+  position=[0,0,1];
+  yaw=-Math.PI/2;
+  pitch=0;
+  const artifact=artifacts[index-1];
+  artifactName.textContent=artifact.title;
+  artifactMeta.textContent=artifact.meta;
+  artifactDescription.textContent=artifact.description;
+  document.querySelectorAll('.artifact').forEach((el,i)=>el.classList.toggle('active',i===index-1));
+  // Render the selected scene immediately using the current camera.
+  issueRender(matrix());
+}
+
+artifacts.forEach((artifact,i)=>{
+  const button=document.createElement('button');
+  button.className='artifact'+(i===0?' active':'');
+  button.type='button';
+  button.innerHTML=`
+    <img src="assets/scene-${artifact.sceneIndex}.jpg" alt="${artifact.title}">
+    <span class="artifact-title">${artifact.title}</span>
+    <span class="artifact-scene">Scene ${artifact.sceneIndex}</span>`;
+  button.addEventListener('click',()=>selectArtifact(artifact.sceneIndex));
+  carousel.append(button);
+});
+
+// Start one unit in front of the origin-centered artifact, matching scenes 1001–1010.
+position=[0,0,1];
+yaw=-Math.PI/2;
+pitch=0;
+
+view.addEventListener('mousedown',event=>{
+  if(event.target.closest('button')) return;
+  if(event.button===0){
+    view.requestPointerLock();
+  }
+});
+view.addEventListener('contextmenu',event=>{
+  event.preventDefault();
+  if(document.pointerLockElement===view){
+    document.exitPointerLock();
+  }
+});
+document.addEventListener('pointerlockchange',()=>{
+  active=document.pointerLockElement===view;
+  statusEl.textContent=active?`Scene ${sceneIndex} · free look active`:`Scene ${sceneIndex} · free look released`;
+  if(active) noteMovement();
+});
+
+document.addEventListener('contextmenu',event=>{
+  if(active && view.contains(event.target)) event.preventDefault();
+});
+document.addEventListener('mousemove',event=>{
+  if(!active) return;
+  yaw+=event.movementX*.002;
+  pitch=Math.max(-1.54,Math.min(1.54,pitch-event.movementY*.002));
+  noteMovement();
+});
+document.addEventListener('keydown',event=>{
+  if(active) {
+    keys.add(event.code);
+    noteMovement();
+    event.preventDefault();
+  }
+});
+document.addEventListener('keyup',event=>keys.delete(event.code));
+
+document.getElementById('resetView').addEventListener('click',event=>{
+  event.stopPropagation();
+  orbiting=false;
+  document.getElementById('orbitView').classList.remove('active');
+  position=[0,0,1];
+  yaw=-Math.PI/2;
+  pitch=0;
+  issueRender(matrix());
+});
+document.getElementById('orbitView').addEventListener('click',event=>{
+  event.stopPropagation();
+  orbiting=!orbiting;
+  document.getElementById('orbitView').classList.toggle('active',orbiting);
+  if(orbiting) {
+    active=false;
+    if(document.pointerLockElement===view) document.exitPointerLock();
+    statusEl.textContent=`Scene ${sceneIndex} · orbiting`;
+  } else {
+    statusEl.textContent=`Scene ${sceneIndex} · orbit stopped`;
+  }
+  motionQueued=true;
+});
+document.getElementById('fullscreen').addEventListener('click',event=>{
+  event.stopPropagation();
+  if(!document.fullscreenElement) view.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
+
+// Initial scene render and catalogue selection.
+selectArtifact(1);
+</script>
+</body>
+</html>
