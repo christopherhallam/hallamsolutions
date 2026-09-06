@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>interactivecloudrender Lambda test</title>
+<style>
+body{font:16px system-ui;margin:2rem;background:#171717;color:#eee}button{margin:.25rem;padding:.5rem 1rem}label{margin-left:1rem}input[type=number]{width:4rem;padding:.25rem}img{display:block;margin-top:1rem;max-width:100%;border:1px solid #aaa}#view{margin-top:1rem;padding:1rem;border:1px solid #777;background:#252525;cursor:crosshair;user-select:none}kbd{background:#333;padding:.15rem .35rem}
+</style>
+</head>
+<body>
+<h1>interactivecloudrender</h1>
+<p id="status">Select a camera, or click Free look.</p>
+<div id="cameras"></div>
+<button id="freelook">Free look</button>
+<label><input id="async" type="checkbox"> Async requests</label>
+<label>FPS <input id="async-fps" type="number" min="1" max="120" step="1" value="15" size="3"></label>
+<label>Move speed <input id="move-speed" type="number" min="0.01" max="10" step="0.01" value="0.30" size="4"></label>
+<label>Scene index <input id="scene-index" type="number" min="0" step="1" value="0" aria-label="Scene index"></label>
+<span> Click the control area, use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, mouse look, <kbd>Shift</kbd> slow, <kbd>Esc</kbd> release.</span>
+<div id="view">Free-look control area</div>
+<p id="telemetry">Last frame received: — · 5-frame receive average: —</p>
+<p id="render-telemetry">Renderer telemetry: —</p>
+<img id="image" alt="Rendered frame">
+<details><summary>Last camera matrix</summary><textarea id="camera-matrix" readonly rows="4" cols="100"></textarea></details>
+<script>
+// The Lambda Function URL must allow this page's origin through its CORS settings.
+const lambdaUrl = 'https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
+const cameras = {
+  camera1:[.974174,0,-.014282,-.055994,-.004531,1.704247,-.309066,-.067883,0,0,0,.01,-.014424,-.178459,-.983842,.563640],
+  camera2:[.650398,0,-.725397,.040743,.161630,1.718393,.144919,-.236218,0,0,0,.01,-.738677,.125334,-.662305,.315036],
+  camera3:[-.698965,0,-.678724,.062357,-1.152657,.512186,1.187032,-.085197,0,0,0,.01,-.206005,-.955277,.212149,.460692],
+  camera4:[.924031,0,-.308846,-.045320,-.189948,1.625100,-.568304,-.306057,0,0,0,.01,-.297425,-.345953,-.889862,.112355]
+};
+const statusEl=document.getElementById('status'), telemetryEl=document.getElementById('telemetry'), renderTelemetryEl=document.getElementById('render-telemetry'), image=document.getElementById('image'), view=document.getElementById('view'), asyncBox=document.getElementById('async'), asyncFpsInput=document.getElementById('async-fps'), moveSpeedInput=document.getElementById('move-speed'), sceneIndexInput=document.getElementById('scene-index'), cameraMatrixOutput=document.getElementById('camera-matrix');
+let serialInFlight=false, serialPending=false, active=false, keys=new Set(), position=[0,1.5,3], yaw=-Math.PI/2, pitch=-.12, lastMove=performance.now(), lastImageUrl=null, requestId=0, displayedId=0;
+let motionQueued=false, settlingFrames=0;
+const receivedFrames=[];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]], norm=a=>{const n=Math.hypot(...a);return a.map(x=>x/n)};
+function matrix(){const aspect=16/9,fy=1/Math.tan(Math.PI/6),fx=fy/aspect,f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]),r=norm(cross(f,[0,1,0])),u=cross(r,f),v=[r[0],r[1],r[2],-dot(r,position),u[0],u[1],u[2],-dot(u,position),-f[0],-f[1],-f[2],dot(f,position),0,0,0,1];return[fx*v[0],fx*v[1],fx*v[2],fx*v[3],fy*v[4],fy*v[5],fy*v[6],fy*v[7],.01*v[12],.01*v[13],.01*v[14],.01*v[15],-v[8],-v[9],-v[10],-v[11]]}
+function applyCameraMatrix(cameraMatrix){const aspect=16/9,fy=1/Math.tan(Math.PI/6),fx=fy/aspect;const right=cameraMatrix.slice(0,3).map(x=>x/fx),up=cameraMatrix.slice(4,7).map(x=>x/fy),back=cameraMatrix.slice(12,15).map(x=>-x);const translation=[cameraMatrix[3]/fx,cameraMatrix[7]/fy,-cameraMatrix[15]];position=[0,1,2].map(i=>-right[i]*translation[0]-up[i]*translation[1]-back[i]*translation[2]);const forward=back.map(x=>-x);yaw=Math.atan2(forward[2],forward[0]);pitch=Math.asin(Math.max(-1,Math.min(1,forward[1])))}
+// Start free-look at a known valid world3 camera rather than an arbitrary pose.
+applyCameraMatrix(cameras.camera2);
+function recordFrameReceived(){receivedFrames.push(performance.now());if(receivedFrames.length>5)receivedFrames.shift()}
+function updateTelemetry(){const mode=asyncBox.checked?`async, ${asyncFps()} FPS cap`:'serial';if(!receivedFrames.length){telemetryEl.textContent=`Client: ${mode} · Last frame received: — · 5-frame receive average: —`;return}const now=performance.now(),last=receivedFrames.at(-1),age=((now-last)/1000).toFixed(2);let average='—';if(receivedFrames.length>1)average=`${Math.round((last-receivedFrames[0])/(receivedFrames.length-1))} ms`;telemetryEl.textContent=`Client: ${mode} · Last frame received: ${age} s ago · ${receivedFrames.length}-frame receive average: ${average}`}
+setInterval(updateTelemetry,100);
+function updateRenderTelemetry(headers){const value=name=>headers.get(name);const render=value('X-Render-Ms'),raster=value('X-Raster-Ms'),jpeg=value('X-Jpeg-Encode-Ms'),base64=value('X-Base64-Encode-Ms'),message=value('X-Message-Create-Ms'),bytes=value('X-Jpeg-Bytes');if(!render)return;renderTelemetryEl.textContent=`Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`}
+async function issueRender(cameraMatrix){cameraMatrixOutput.value=JSON.stringify(cameraMatrix);const id=++requestId,started=performance.now(),sceneIndex=Math.max(0,Math.floor(Number(sceneIndexInput.value)||0));statusEl.textContent=`Rendering… (${requestId-displayedId} in flight)`;try{const response=await fetch(lambdaUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneIndex,cameraMatrix})});if(!response.ok)throw Error(`HTTP ${response.status}: ${await response.text()}`);updateRenderTelemetry(response.headers);const jpeg=await response.blob();recordFrameReceived();if(id>=displayedId){displayedId=id;if(lastImageUrl)URL.revokeObjectURL(lastImageUrl);lastImageUrl=URL.createObjectURL(jpeg);image.src=lastImageUrl;statusEl.textContent=`Frame ${id}: ${Math.round(performance.now()-started)} ms`}}catch(error){statusEl.textContent=error.message}}
+function requestSerial(){if(serialInFlight){serialPending=true;return}serialInFlight=true;issueRender(matrix()).finally(()=>{serialInFlight=false;if(serialPending){serialPending=false;requestSerial()}})}
+function noteMovement(){if(asyncBox.checked){motionQueued=true}else requestSerial()}
+function isMoving(){return active&&keys.size>0}
+function asyncFps(){const value=Number(asyncFpsInput.value);return Number.isFinite(value)?Math.max(1,Math.min(120,value)):15}
+function moveSpeed(){const value=Number(moveSpeedInput.value);return Number.isFinite(value)?Math.max(.01,Math.min(10,value)):.3}
+// Async mode is deliberately not gated on a response: it can have concurrent Lambda invocations.
+function asyncTick(){if(asyncBox.checked){if(isMoving()||motionQueued){motionQueued=false;settlingFrames=2;issueRender(matrix())}else if(settlingFrames>0){settlingFrames--;issueRender(matrix())}}setTimeout(asyncTick,1000/asyncFps())}
+asyncTick();
+function tick(now){const dt=Math.min(.05,(now-lastMove)/1000);lastMove=now;if(isMoving()){const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]),r=norm(cross(f,[0,1,0]));const speed=moveSpeed()*(keys.has('ShiftLeft')||keys.has('ShiftRight')?.1:1);if(keys.has('KeyW'))position=position.map((x,i)=>x+f[i]*speed*dt);if(keys.has('KeyS'))position=position.map((x,i)=>x-f[i]*speed*dt);if(keys.has('KeyD'))position=position.map((x,i)=>x+r[i]*speed*dt);if(keys.has('KeyA'))position=position.map((x,i)=>x-r[i]*speed*dt);if(!asyncBox.checked)noteMovement()}requestAnimationFrame(tick)}requestAnimationFrame(tick);
+view.onclick=()=>view.requestPointerLock();document.getElementById('freelook').onclick=()=>view.requestPointerLock();document.addEventListener('pointerlockchange',()=>{active=document.pointerLockElement===view;statusEl.textContent=active?'Free look active':'Free look released';if(active)noteMovement()});document.addEventListener('mousemove',event=>{if(!active)return;yaw+=event.movementX*.002;pitch=Math.max(-1.54,Math.min(1.54,pitch-event.movementY*.002));noteMovement()});document.addEventListener('keydown',event=>{if(active){keys.add(event.code);noteMovement();event.preventDefault()}});document.addEventListener('keyup',event=>keys.delete(event.code));
+for(const [name,cameraMatrix] of Object.entries(cameras)){const button=document.createElement('button');button.textContent=name;button.onclick=()=>{applyCameraMatrix(cameraMatrix);issueRender(cameraMatrix)};document.getElementById('cameras').append(button)}
+</script>
+</body>
+</html>
