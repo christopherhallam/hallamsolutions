@@ -511,8 +511,18 @@ function matrix() {
   return [
     fx*v[0],fx*v[1],fx*v[2],fx*v[3],
     fy*v[4],fy*v[5],fy*v[6],fy*v[7],
-    .01*v[12],.01*v[13],.01*v[14],.01*v[15],
+    0,0,0,.01,
     -v[8],-v[9],-v[10],-v[11]
+  ];
+}
+
+function worldTransform() {
+  const c=Math.cos(orbitAngle), s=Math.sin(orbitAngle);
+  return [
+    c,0,s,0,
+    0,1,0,0,
+    -s,0,c,0,
+    0,0,0,1
   ];
 }
 
@@ -577,7 +587,7 @@ async function issueRender(cameraMatrix) {
     const response=await fetch(lambdaUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sceneIndex,cameraMatrix})
+      body:JSON.stringify({sceneIndex,worldTransform:worldTransform(),viewProjection:cameraMatrix})
     });
     if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
     updateRenderTelemetry(response.headers);
@@ -605,7 +615,7 @@ function noteMovement() {
 }
 
 function isMoving() {
-  return !orbiting && (active || mobileMoving) && keys.size>0;
+  return (active || mobileMoving) && keys.size>0;
 }
 
 function asyncTick() {
@@ -626,10 +636,6 @@ function tick(now) {
   lastMove=now;
   if(orbiting) {
     orbitAngle=(orbitAngle+dt*0.8)%(Math.PI*2);
-    position=[Math.sin(orbitAngle)*orbitRadius,0,Math.cos(orbitAngle)*orbitRadius];
-    const forward=norm([-position[0],0,-position[2]]);
-    yaw=Math.atan2(forward[2],forward[0]);
-    pitch=0;
     motionQueued=true;
   }
   if(isMoving()) {
@@ -667,6 +673,7 @@ function selectArtifact(index) {
   sceneIndex=index;
   orbiting=false;
   document.getElementById('orbitView').classList.remove('active');
+  orbitAngle=0;
   position=[0,0,1];
   yaw=-Math.PI/2;
   pitch=0;
@@ -794,6 +801,7 @@ document.getElementById('resetView').addEventListener('click',event=>{
   event.stopPropagation();
   orbiting=false;
   document.getElementById('orbitView').classList.remove('active');
+  orbitAngle=0;
   position=[0,0,1];
   yaw=-Math.PI/2;
   pitch=0;
@@ -804,8 +812,6 @@ document.getElementById('orbitView').addEventListener('click',event=>{
   orbiting=!orbiting;
   document.getElementById('orbitView').classList.toggle('active',orbiting);
   if(orbiting) {
-    active=false;
-    if(document.pointerLockElement===view) document.exitPointerLock();
     statusEl.textContent=`Scene ${sceneIndex} · orbiting`;
   } else {
     statusEl.textContent=`Scene ${sceneIndex} · orbit stopped`;
