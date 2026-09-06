@@ -13,10 +13,10 @@ body{font:16px system-ui;margin:2rem;background:#171717;color:#eee}button{margin
 <p id="status">Select a camera, or click Free look.</p>
 <div id="cameras"></div>
 <button id="freelook">Free look</button>
-<label><input id="async" type="checkbox"> Async requests</label>
-<label>FPS <input id="async-fps" type="number" min="1" max="120" step="1" value="15" size="3"></label>
+<label><input id="async" type="checkbox" checked> Async requests</label>
+<label>FPS <input id="async-fps" type="number" min="1" max="120" step="1" value="30" size="3"></label>
 <label>Move speed <input id="move-speed" type="number" min="0.01" max="10" step="0.01" value="0.30" size="4"></label>
-<label>Scene index <input id="scene-index" type="number" min="0" step="1" value="0" aria-label="Scene index"></label>
+<label>Scene index <input id="scene-index" type="number" min="0" step="1" value="1" aria-label="Scene index"></label>
 <span> Click the control area, use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, mouse look, <kbd>Shift</kbd> slow, <kbd>Esc</kbd> release.</span>
 <div id="view">Free-look control area</div>
 <p id="telemetry">Last frame received: — · 5-frame receive average: —</p>
