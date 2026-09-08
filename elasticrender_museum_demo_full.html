@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ElasticRender — Interactive Museum Demo</title>
+<style>
+  :root {
+    --ink:#f6f0e5;
+    --muted:#d9d0c0;
+    --gold:#e6b85c;
+    --panel:rgba(20,20,22,.78);
+    --panel2:rgba(12,12,14,.70);
+    --line:rgba(255,255,255,.16);
+    --shadow:0 20px 60px rgba(0,0,0,.34);
+  }
+  * { box-sizing:border-box; }
+  html,body { min-height:100%; margin:0; }
+  body {
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(rgba(12,10,9,.24),rgba(12,10,9,.48)),
+      url("assets/britishmuseum.jpg") center/cover fixed;
+  }
+  button,input { font:inherit; }
+  button { color:inherit; }
+  .page {
+    min-height:100vh;
+    height:auto;
+    overflow:visible;
+    padding:14px 24px 12px;
+    display:grid;
+    grid-template-rows:auto auto auto auto;
+    gap:10px;
+    background:
+      linear-gradient(90deg,rgba(12,10,8,.32),transparent 24%,transparent 74%,rgba(12,10,8,.28));
+  }
+  header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:28px;
+    min-width:0;
+  }
+  .hero-grid > * { min-width:0; }
+  .brand {
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  .brand-mark {
+    width:36px;height:36px;border:1px solid rgba(255,255,255,.45);
+    border-radius:10px;display:grid;place-items:center;background:rgba(15,15,17,.34);
+    backdrop-filter:blur(12px);font-weight:700;letter-spacing:-.05em;
+  }
+  .brand-name {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:25px;line-height:1;letter-spacing:.01em;
+  }
+  .brand-name strong { font-weight:700; }
+  .tagline { color:var(--muted);font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-top:6px; }
+  nav { display:flex;gap:22px;font-family:Georgia,"Times New Roman",serif;font-size:15px; }
+  nav a { color:var(--ink);text-decoration:none;opacity:.92; }
+  nav a.active { border-bottom:2px solid var(--gold);padding-bottom:8px; }
+
+  .hero-grid {
+    display:grid;
+    grid-template-columns:minmax(175px,.42fr) minmax(0,576px) minmax(265px,.72fr);
+    gap:12px;
+    align-items:start;
+    min-height:0;
+    height:auto;
+  }
+  .intro {
+    align-self:center;
+    padding:0 6px;
+    text-shadow:0 2px 18px rgba(0,0,0,.4);
+  }
+  .intro h1 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;
+    font-size:clamp(30px,3vw,50px);
+    line-height:1.04;
+    margin:0 0 22px;
+  }
+  .rule { width:62px;height:3px;background:var(--gold);margin:0 0 20px; }
+  .intro p { max-width:300px;line-height:1.55;color:#f0e7da;margin:0; }
+
+  .viewer-card {
+    position:relative;
+    width:min(576px, 100%);
+    aspect-ratio:1/1;
+    max-width:576px;
+    max-height:576px;
+    min-height:0;
+    border-radius:18px;
+    overflow:hidden;
+    background:rgba(8,9,11,.88);
+    border:1px solid rgba(255,255,255,.28);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(8px);
+    cursor:crosshair;
+    user-select:none;
+  }
+  #image {
+    width:100%;
+    height:100%;
+    display:block;
+    object-fit:contain;
+    background:#0c0d0f;
+  }
+  .viewer-overlay {
+    position:absolute;inset:0;pointer-events:none;
+    display:flex;flex-direction:column;justify-content:space-between;
+    background:linear-gradient(180deg,rgba(0,0,0,.20),transparent 22%,transparent 72%,rgba(0,0,0,.42));
+  }
+  .viewer-top,.viewer-bottom {
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 16px;
+  }
+  .pill {
+    padding:8px 11px;border-radius:999px;background:rgba(17,18,21,.68);
+    border:1px solid rgba(255,255,255,.20);font-size:12px;color:#eee;
+    backdrop-filter:blur(8px);
+  }
+  #status { white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%; }
+  .interaction-hint { color:#eee;opacity:.88; }
+  .viewer-actions { pointer-events:auto;display:flex;gap:8px; }
+  .icon-btn {
+    width:38px;height:38px;border:1px solid rgba(255,255,255,.22);
+    background:rgba(17,18,21,.72);border-radius:10px;cursor:pointer;
+  }
+  .icon-btn:hover { background:rgba(35,36,39,.86); }
+  .icon-btn.active { border-color:var(--gold);color:var(--gold);background:rgba(75,55,22,.78); }
+  .mobile-pad { display:none; }
+
+  .info-card {
+    align-self:stretch;
+    border-radius:18px;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(16px);
+    padding:20px 20px;
+    display:flex;flex-direction:column;
+    min-height:280px;
+  }
+  .eyebrow { color:var(--gold);font-size:11px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:10px; }
+  .info-card h2 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:31px;font-weight:400;line-height:1.1;margin:0 0 13px;
+  }
+  .meta { color:#eee;line-height:1.55;margin-bottom:16px; }
+  .info-card .rule { width:56px;height:2px;margin:0 0 18px; }
+  .description { color:#efe7dc;line-height:1.58;margin:0 0 20px; }
+  .controls {
+    margin-top:auto;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:13px;line-height:1.55;
+  }
+  kbd {
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);
+    border-radius:5px;padding:2px 5px;color:#fff;
+  }
+
+  .carousel-wrap {
+    border-radius:14px;background:rgba(17,14,12,.72);
+    border:1px solid rgba(255,255,255,.15);
+    box-shadow:var(--shadow);backdrop-filter:blur(12px);
+    padding:8px;
+  }
+  .carousel {
+    display:grid;
+    grid-template-columns:repeat(10,minmax(105px,1fr));
+    gap:10px;
+    overflow-x:auto;
+    scrollbar-width:thin;
+  }
+  .artifact {
+    min-width:88px;border:1px solid transparent;background:rgba(255,255,255,.055);
+    border-radius:12px;padding:7px;cursor:pointer;text-align:left;transition:.15s ease;
+  }
+  .artifact:hover { transform:translateY(-2px);background:rgba(255,255,255,.09); }
+  .artifact.active { border-color:var(--gold);box-shadow:0 0 0 1px rgba(230,184,92,.18) inset; }
+  .artifact img {
+    width:100%;aspect-ratio:2/1;display:block;object-fit:cover;border-radius:7px;max-height:72px;
+    background:#202124;margin-bottom:7px;
+  }
+  .artifact-title { display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .artifact-scene { color:#cbbfae;font-size:10px;margin-top:2px; }
+
+  .content-section {
+    width:min(1120px,100%);
+    margin:16px auto 0;
+    padding:30px;
+    border-radius:18px;
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(16px);
+    scroll-margin-top:18px;
+  }
+  .section-heading { max-width:780px; }
+  .section-heading h2 {
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:clamp(26px,3vw,42px);font-weight:400;line-height:1.1;margin:0 0 14px;
+  }
+  .section-heading p { color:#efe7dc;line-height:1.6;margin:0 0 14px; }
+  .technology-grid {
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px;
+  }
+  .technology-grid article {
+    padding:18px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.045);
+  }
+  .technology-grid h3 { margin:0 0 8px;font-family:Georgia,"Times New Roman",serif;font-size:20px;font-weight:400; }
+  .technology-grid p { color:var(--muted);line-height:1.55;margin:0;font-size:14px; }
+  .contact-form { display:grid;gap:14px;max-width:620px;margin-top:22px; }
+  .contact-form label { display:grid;gap:6px;color:var(--muted);font-size:13px; }
+  .contact-form input,.contact-form textarea {
+    width:100%;padding:11px 12px;border:1px solid rgba(255,255,255,.2);border-radius:8px;
+    background:rgba(0,0,0,.2);color:var(--ink);resize:vertical;
+  }
+  .contact-form input:focus,.contact-form textarea:focus { outline:2px solid rgba(230,184,92,.7);outline-offset:1px; }
+  .contact-form button {
+    justify-self:start;padding:10px 18px;border:1px solid rgba(230,184,92,.65);border-radius:8px;
+    background:rgba(75,55,22,.82);cursor:pointer;
+  }
+  .contact-form button:hover { background:rgba(100,72,25,.9); }
+
+  footer {
+    display:flex;justify-content:space-between;align-items:center;gap:20px;
+    font-size:12px;color:#eee;text-shadow:0 1px 8px rgba(0,0,0,.65);
+  }
+  .powered { display:flex;align-items:center;gap:9px; }
+  .lambda-dot { width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 18px rgba(230,184,92,.9); }
+  details {
+    margin-top:12px;color:#ccc;font-size:12px;
+  }
+  details summary { cursor:pointer;color:#ddd; }
+  .debug {
+    margin-top:8px;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,.28);
+    border:1px solid rgba(255,255,255,.09);line-height:1.55;overflow:auto;
+  }
+
+  @media (max-width:1100px) {
+    .page { padding:22px; }
+    .hero-grid { grid-template-columns:minmax(0,1fr) minmax(260px,320px); }
+    .intro { grid-column:1/-1;padding:0;display:flex;align-items:end;gap:25px; }
+    .intro h1 { max-width:520px;margin-bottom:0; }
+    .intro .intro-copy { max-width:360px; }
+    .intro .rule { display:none; }
+  }
+  @media (max-width:780px) {
+    .page {
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+    }
+    header { order:1; }
+    nav { display:none; }
+    .hero-grid { display:contents; }
+    .intro { display:none; }
+    .viewer-card {
+      order:2;
+      width:min(100%, calc(100vh - 190px), 576px);
+      max-width:576px;
+      min-height:0;
+      justify-self:center;
+    }
+    .carousel-wrap { order:3; }
+    .info-card { min-height:auto; }
+    .info-card { order:4; }
+    .content-section { order:6;margin-top:10px;padding:20px; }
+    .technology-grid { grid-template-columns:1fr; }
+    .interaction-hint { display:none; }
+    .viewer-top,.viewer-bottom { padding:10px; }
+    #frameMode { display:none; }
+    .viewer-actions .icon-btn { width:42px;height:42px; }
+    .mobile-pad {
+      pointer-events:auto;
+      display:grid;
+      grid-template-columns:repeat(3,44px);
+      grid-template-rows:repeat(2,44px);
+      gap:5px;
+      margin:0 10px 10px;
+      align-self:flex-start;
+    }
+    .mobile-pad button {
+      width:44px;height:44px;padding:0;border:1px solid rgba(255,255,255,.25);
+      border-radius:10px;background:rgba(17,18,21,.78);color:#fff;font-size:18px;
+      touch-action:none;
+    }
+    .mobile-pad button:active { background:rgba(75,55,22,.88);border-color:var(--gold); }
+    .mobile-pad [data-key="KeyW"] { grid-column:2;grid-row:1; }
+    .mobile-pad [data-key="KeyA"] { grid-column:1;grid-row:2; }
+    .mobile-pad [data-key="KeyS"] { grid-column:2;grid-row:2; }
+    .mobile-pad [data-key="KeyD"] { grid-column:3;grid-row:2; }
+    .viewer-card { touch-action:none; }
+    footer { order:7;flex-direction:column;align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">ER</div>
+      <div>
+        <div class="brand-name"><strong>Elastic</strong>Render</div>
+        <div class="tagline">On-demand interactive rendering</div>
+      </div>
+    </div>
+    <nav aria-label="Primary">
+      <a class="active" href="#collection">Collection</a>
+      <a href="#about">About</a>
+      <a href="#technology">Technology</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main class="hero-grid" id="collection">
+    <section class="intro">
+      <div>
+        <h1>Extraordinary objects.<br>Rendered on demand.</h1>
+        <div class="rule"></div>
+      </div>
+      <div class="intro-copy">
+        <p>Explore real-world artefacts in interactive 3D. Rendering capacity is created only when you use it.</p>
+      </div>
+    </section>
+
+    <section class="viewer-card" id="view" aria-label="Interactive rendered view">
+      <img id="image" alt="ElasticRender rendered frame">
+      <div class="viewer-overlay">
+        <div class="viewer-top">
+          <span class="pill" id="status">Scene 1 · — FPS</span>
+          <span class="pill interaction-hint">Left-click view · mouse look · WASD · right-click release</span>
+        </div>
+        <div class="viewer-bottom">
+          <span class="pill" id="frameMode">Async · 30 FPS cap</span>
+          <div class="mobile-pad" aria-label="Mobile movement controls">
+            <button type="button" data-key="KeyW" aria-label="Move forward">▲</button>
+            <button type="button" data-key="KeyA" aria-label="Move left">◀</button>
+            <button type="button" data-key="KeyS" aria-label="Move backward">▼</button>
+            <button type="button" data-key="KeyD" aria-label="Move right">▶</button>
+          </div>
+          <div class="viewer-actions">
+            <button class="icon-btn" id="resetView" title="Reset view" aria-label="Reset view">↺</button>
+            <button class="icon-btn" id="orbitView" title="Orbit object" aria-label="Orbit object">◎</button>
+            <button class="icon-btn" id="fullscreen" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="info-card">
+      <div class="eyebrow">Interactive collection</div>
+      <h2 id="artifactName">Artefact 01</h2>
+      <div class="meta" id="artifactMeta">Scene 1 · 3D model</div>
+      <div class="rule"></div>
+      <p class="description" id="artifactDescription">
+        Placeholder catalogue information for model 1. Replace this with the object's title,
+        period, provenance and interpretation text.
+      </p>
+      <div class="controls">
+        Left-click the render to enter free-look mode. Use
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move,
+        move the mouse to look around, hold <kbd>Shift</kbd> for slow movement,
+        and right-click to release free-look.
+        <details>
+          <summary>ElasticRender telemetry</summary>
+          <div class="debug">
+            <div id="telemetry">Client: async, 30 FPS cap · Last frame received: —</div>
+            <div id="render-telemetry">Renderer telemetry: —</div>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </main>
+
+  <section class="carousel-wrap" aria-label="Artefact selection">
+    <div class="carousel" id="carousel"></div>
+  </section>
+
+  <section class="content-section" id="about">
+    <div class="section-heading">
+      <div class="eyebrow">About ElasticRender</div>
+      <h2>Deploy the visualisation, not a permanently idle render farm.</h2>
+      <p>ElasticRender makes large, visually rich 3D datasets available through an ordinary web experience, with rendering capacity created when people are actively exploring.</p>
+    </div>
+    <div class="technology-grid">
+      <article>
+        <h3>On-demand capacity</h3>
+        <p>Rendering resources respond to demand, making interactive applications practical when usage is intermittent, bursty or difficult to predict.</p>
+      </article>
+      <article>
+        <h3>Large assets stay close to compute</h3>
+        <p>Complex collections can remain server-side instead of requiring every visitor to download and process the complete dataset locally.</p>
+      </article>
+      <article>
+        <h3>Thin-client experience</h3>
+        <p>The browser handles interaction and presentation while rendered views are produced remotely, reducing dependence on the visitor’s graphics hardware.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="content-section contact-section" id="technology">
+    <div class="section-heading">
+      <div class="eyebrow">Technology</div>
+      <h2>Interactive access to demanding 3D collections.</h2>
+      <p>ElasticRender supports curated scenes and individual objects, responsive frames while a view is moving, and higher-quality frames when someone stops to inspect a result. It can complement provisioned rendering for sustained workloads while absorbing occasional demand without a permanently running renderer.</p>
+      <p>The approach is suited to museums and cultural heritage, photogrammetry, surveying and geospatial visualisation, engineering and infrastructure, digital twins, architecture and remote inspection.</p>
+    </div>
+  </section>
+
+  <section class="content-section contact-section" id="contact">
+    <div class="section-heading">
+      <div class="eyebrow">Contact</div>
+      <h2>Discuss an interactive 3D project.</h2>
+      <p>Send a message and we’ll get back to you.</p>
+    </div>
+    <form class="contact-form" action="mailto:chris@hallamsolutions.io" method="post" enctype="text/plain">
+      <label>Name<input name="name" type="text" autocomplete="name" required></label>
+      <label>Email<input name="email" type="email" autocomplete="email" required></label>
+      <label>Message<textarea name="message" rows="5" required></textarea></label>
+      <button type="submit">Email Chris</button>
+    </form>
+  </section>
+
+  <footer>
+    <span>Interactive collection prototype</span>
+    <span class="powered"><span class="lambda-dot"></span>Powered by <strong>ElasticRender</strong> · AWS Lambda</span>
+  </footer>
+</div>
+
+<script>
+// Existing Lambda Function URL from the supplied demo.
+const lambdaUrls = [
+  'https://6xlv65kdt2jnuisturcwjqfhfi0xrzdn.lambda-url.eu-west-2.on.aws/',
+  'https://6xlv65kdt2jnuisturcwjqfhfi0xrzdn.lambda-url.eu-west-2.on.aws/',
+  'https://6xlv65kdt2jnuisturcwjqfhfi0xrzdn.lambda-url.eu-west-2.on.aws/',
+  'https://6xlv65kdt2jnuisturcwjqfhfi0xrzdn.lambda-url.eu-west-2.on.aws/'
+];
+const lambdaUrl = lambdaUrls[0];
+const ASYNC_FPS = 30;
+const MOVE_SPEED = 2;
+// The test Lambda is currently rendering at 1920x1080.
+const RENDER_ASPECT = 1920 / 1080;
+
+// Catalogue metadata matched to the ten meshes used by scenes 1001–1010.
+const artifacts = [
+  {sceneIndex:0,globalSceneIndex:2001,dockerIndex:2,title:'A61C7F4F81E04847930Ebed04585Fb50',meta:'British Museum',description:'High-resolution 3D model of A61C7F4F81E04847930Ebed04585Fb50 from the British Museum collection.'},
+  {sceneIndex:0,globalSceneIndex:2002,dockerIndex:1,title:'A Beserker From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Beserker From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:1,globalSceneIndex:2003,dockerIndex:1,title:'A Bishop From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Bishop From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:2,globalSceneIndex:2004,dockerIndex:1,title:'A Bronze Age Sussex Loop Bracelet',meta:'British Museum',description:'High-resolution 3D model of A Bronze Age Sussex Loop Bracelet from the British Museum collection.'},
+  {sceneIndex:0,globalSceneIndex:2005,dockerIndex:3,title:'A Bronze Age Sussex Loop Bracelet',meta:'British Museum',description:'High-resolution 3D model of A Bronze Age Sussex Loop Bracelet from the British Museum collection.'},
+  {sceneIndex:1,globalSceneIndex:2006,dockerIndex:2,title:'A Bust Of Demosthenes',meta:'British Museum',description:'High-resolution 3D model of A Bust Of Demosthenes from the British Museum collection.'},
+  {sceneIndex:1,globalSceneIndex:2007,dockerIndex:3,title:'A Bust Of Gaius Caesar',meta:'British Museum',description:'High-resolution 3D model of A Bust Of Gaius Caesar from the British Museum collection.'},
+  {sceneIndex:2,globalSceneIndex:2008,dockerIndex:3,title:'A Bust Of Livia',meta:'British Museum',description:'High-resolution 3D model of A Bust Of Livia from the British Museum collection.'},
+  {sceneIndex:0,globalSceneIndex:2009,dockerIndex:4,title:'A Draughts Piece From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Draughts Piece From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:1,globalSceneIndex:2010,dockerIndex:4,title:'A King From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A King From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:3,globalSceneIndex:2011,dockerIndex:1,title:'A King From The Lewis Chesspieces',meta:'British Museum',description:'High-resolution 3D model of A King From The Lewis Chesspieces from the British Museum collection.'},
+  {sceneIndex:2,globalSceneIndex:2012,dockerIndex:2,title:'A Knight From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Knight From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:3,globalSceneIndex:2013,dockerIndex:2,title:'A Marble Bust Of Titus',meta:'British Museum',description:'High-resolution 3D model of A Marble Bust Of Titus from the British Museum collection.'},
+  {sceneIndex:4,globalSceneIndex:2014,dockerIndex:2,title:'A Marble Head Of Vespasian',meta:'British Museum',description:'High-resolution 3D model of A Marble Head Of Vespasian from the British Museum collection.'},
+  {sceneIndex:3,globalSceneIndex:2015,dockerIndex:3,title:'A Marble Portait Bust Of Trajan',meta:'British Museum',description:'High-resolution 3D model of A Marble Portait Bust Of Trajan from the British Museum collection.'},
+  {sceneIndex:4,globalSceneIndex:2016,dockerIndex:3,title:'A Pawn From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Pawn From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:5,globalSceneIndex:2017,dockerIndex:2,title:'A Pawn From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Pawn From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:2,globalSceneIndex:2018,dockerIndex:4,title:'A Queen From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Queen From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:4,globalSceneIndex:2019,dockerIndex:1,title:'A Queen From The Lewis Chesspieces',meta:'British Museum',description:'High-resolution 3D model of A Queen From The Lewis Chesspieces from the British Museum collection.'},
+  {sceneIndex:5,globalSceneIndex:2020,dockerIndex:1,title:'A Statue Of Gudea',meta:'British Museum',description:'High-resolution 3D model of A Statue Of Gudea from the British Museum collection.'},
+  {sceneIndex:5,globalSceneIndex:2021,dockerIndex:3,title:'A Statue Of Roy High Priest Of Amun',meta:'British Museum',description:'High-resolution 3D model of A Statue Of Roy High Priest Of Amun from the British Museum collection.'},
+  {sceneIndex:6,globalSceneIndex:2022,dockerIndex:3,title:'A Statue Of Sekhmet',meta:'British Museum',description:'High-resolution 3D model of A Statue Of Sekhmet from the British Museum collection.'},
+  {sceneIndex:6,globalSceneIndex:2023,dockerIndex:1,title:'A Statue Of Sekhmet',meta:'British Museum',description:'High-resolution 3D model of A Statue Of Sekhmet from the British Museum collection.'},
+  {sceneIndex:3,globalSceneIndex:2024,dockerIndex:4,title:'A Stemmed Bowl',meta:'British Museum',description:'High-resolution 3D model of A Stemmed Bowl from the British Museum collection.'},
+  {sceneIndex:7,globalSceneIndex:2025,dockerIndex:3,title:'A Warder From The Lewis Chessmen',meta:'British Museum',description:'High-resolution 3D model of A Warder From The Lewis Chessmen from the British Museum collection.'},
+  {sceneIndex:4,globalSceneIndex:2026,dockerIndex:4,title:'Ain Sakhri Lovers',meta:'British Museum',description:'High-resolution 3D model of Ain Sakhri Lovers from the British Museum collection.'},
+  {sceneIndex:6,globalSceneIndex:2027,dockerIndex:2,title:'Alexander',meta:'British Museum',description:'High-resolution 3D model of Alexander from the British Museum collection.'},
+  {sceneIndex:8,globalSceneIndex:2028,dockerIndex:3,title:'Amaravati Double Sided Relief',meta:'British Museum',description:'High-resolution 3D model of Amaravati Double Sided Relief from the British Museum collection.'},
+  {sceneIndex:9,globalSceneIndex:2029,dockerIndex:3,title:'Amaravati Guardian Lion',meta:'British Museum',description:'High-resolution 3D model of Amaravati Guardian Lion from the British Museum collection.'},
+  {sceneIndex:7,globalSceneIndex:2030,dockerIndex:2,title:'Amenhotep Iii',meta:'British Museum',description:'High-resolution 3D model of Amenhotep Iii from the British Museum collection.'},
+  {sceneIndex:7,globalSceneIndex:2031,dockerIndex:1,title:'Amiens',meta:'British Museum',description:'High-resolution 3D model of Amiens from the British Museum collection.'},
+  {sceneIndex:8,globalSceneIndex:2032,dockerIndex:2,title:'Ampulla Of St Thomas Becket',meta:'British Museum',description:'High-resolution 3D model of Ampulla Of St Thomas Becket from the British Museum collection.'},
+  {sceneIndex:8,globalSceneIndex:2033,dockerIndex:1,title:'An Ethiopian Metal Head Reliquary',meta:'British Museum',description:'High-resolution 3D model of An Ethiopian Metal Head Reliquary from the British Museum collection.'},
+  {sceneIndex:5,globalSceneIndex:2034,dockerIndex:4,title:'An Etruscan Flask',meta:'British Museum',description:'High-resolution 3D model of An Etruscan Flask from the British Museum collection.'},
+  {sceneIndex:6,globalSceneIndex:2035,dockerIndex:4,title:'Antinous',meta:'British Museum',description:'High-resolution 3D model of Antinous from the British Museum collection.'},
+  {sceneIndex:9,globalSceneIndex:2036,dockerIndex:1,title:'Athenian Decree On A Block',meta:'British Museum',description:'High-resolution 3D model of Athenian Decree On A Block from the British Museum collection.'},
+  {sceneIndex:7,globalSceneIndex:2037,dockerIndex:4,title:'Badge Of The Black Prince',meta:'British Museum',description:'High-resolution 3D model of Badge Of The Black Prince from the British Museum collection.'},
+  {sceneIndex:10,globalSceneIndex:2038,dockerIndex:1,title:'Becket On A Peacock',meta:'British Museum',description:'High-resolution 3D model of Becket On A Peacock from the British Museum collection.'},
+  {sceneIndex:8,globalSceneIndex:2039,dockerIndex:4,title:'Becket On Horseback Badge Mould 1890 1002 1',meta:'British Museum',description:'High-resolution 3D model of Becket On Horseback Badge Mould 1890 1002 1 from the British Museum collection.'},
+  {sceneIndex:9,globalSceneIndex:2040,dockerIndex:4,title:'Bird Shaped Censer',meta:'British Museum',description:'High-resolution 3D model of Bird Shaped Censer from the British Museum collection.'},
+  {sceneIndex:11,globalSceneIndex:2041,dockerIndex:1,title:'Black Basalt Stela Of The Goddess Kubaba',meta:'British Museum',description:'High-resolution 3D model of Black Basalt Stela Of The Goddess Kubaba from the British Museum collection.'},
+  {sceneIndex:10,globalSceneIndex:2042,dockerIndex:3,title:'Breccia Statue Of Taweret',meta:'British Museum',description:'High-resolution 3D model of Breccia Statue Of Taweret from the British Museum collection.'},
+  {sceneIndex:12,globalSceneIndex:2043,dockerIndex:1,title:'British Museum From Aerial Photos',meta:'British Museum',description:'High-resolution 3D model of British Museum From Aerial Photos from the British Museum collection.'},
+  {sceneIndex:9,globalSceneIndex:2044,dockerIndex:2,title:'Bronze Age Spearhead',meta:'British Museum',description:'High-resolution 3D model of Bronze Age Spearhead from the British Museum collection.'},
+  {sceneIndex:13,globalSceneIndex:2045,dockerIndex:1,title:'Bronze Age Spearhead',meta:'British Museum',description:'High-resolution 3D model of Bronze Age Spearhead from the British Museum collection.'},
+  {sceneIndex:14,globalSceneIndex:2046,dockerIndex:1,title:'Buddha Preaching',meta:'British Museum',description:'High-resolution 3D model of Buddha Preaching from the British Museum collection.'},
+  {sceneIndex:10,globalSceneIndex:2047,dockerIndex:2,title:'Burial Chest',meta:'British Museum',description:'High-resolution 3D model of Burial Chest from the British Museum collection.'},
+  {sceneIndex:15,globalSceneIndex:2048,dockerIndex:1,title:'Burial Chest',meta:'British Museum',description:'High-resolution 3D model of Burial Chest from the British Museum collection.'},
+  {sceneIndex:10,globalSceneIndex:2049,dockerIndex:4,title:'Burney Relief Queen Of The Night Draft',meta:'British Museum',description:'High-resolution 3D model of Burney Relief Queen Of The Night Draft from the British Museum collection.'},
+  {sceneIndex:11,globalSceneIndex:2050,dockerIndex:4,title:'Bust Of Augustus',meta:'British Museum',description:'High-resolution 3D model of Bust Of Augustus from the British Museum collection.'},
+  {sceneIndex:11,globalSceneIndex:2051,dockerIndex:2,title:'Bust Of Perikles',meta:'British Museum',description:'High-resolution 3D model of Bust Of Perikles from the British Museum collection.'},
+  {sceneIndex:12,globalSceneIndex:2052,dockerIndex:2,title:'Caracalla',meta:'British Museum',description:'High-resolution 3D model of Caracalla from the British Museum collection.'},
+  {sceneIndex:16,globalSceneIndex:2053,dockerIndex:1,title:'Carian Stela',meta:'British Museum',description:'High-resolution 3D model of Carian Stela from the British Museum collection.'},
+  {sceneIndex:13,globalSceneIndex:2054,dockerIndex:2,title:'Carian Stela In Surface Smooth',meta:'British Museum',description:'High-resolution 3D model of Carian Stela In Surface Smooth from the British Museum collection.'},
+  {sceneIndex:14,globalSceneIndex:2055,dockerIndex:2,title:'Cat And Mouse Badge',meta:'British Museum',description:'High-resolution 3D model of Cat And Mouse Badge from the British Museum collection.'},
+  {sceneIndex:11,globalSceneIndex:2056,dockerIndex:3,title:'Chrysippos',meta:'British Museum',description:'High-resolution 3D model of Chrysippos from the British Museum collection.'},
+  {sceneIndex:12,globalSceneIndex:2057,dockerIndex:3,title:'Cinerary Urn',meta:'British Museum',description:'High-resolution 3D model of Cinerary Urn from the British Museum collection.'},
+  {sceneIndex:13,globalSceneIndex:2058,dockerIndex:3,title:'Clay Cuneiform Tablet',meta:'British Museum',description:'High-resolution 3D model of Clay Cuneiform Tablet from the British Museum collection.'},
+  {sceneIndex:17,globalSceneIndex:2059,dockerIndex:1,title:'Clay Tablet',meta:'British Museum',description:'High-resolution 3D model of Clay Tablet from the British Museum collection.'},
+  {sceneIndex:15,globalSceneIndex:2060,dockerIndex:2,title:'Clay Tablet',meta:'British Museum',description:'High-resolution 3D model of Clay Tablet from the British Museum collection.'},
+  {sceneIndex:12,globalSceneIndex:2061,dockerIndex:4,title:'Clay Tablet',meta:'British Museum',description:'High-resolution 3D model of Clay Tablet from the British Museum collection.'},
+  {sceneIndex:16,globalSceneIndex:2062,dockerIndex:2,title:'Colossal Arm',meta:'British Museum',description:'High-resolution 3D model of Colossal Arm from the British Museum collection.'},
+  {sceneIndex:13,globalSceneIndex:2063,dockerIndex:4,title:'Colossal Foot',meta:'British Museum',description:'High-resolution 3D model of Colossal Foot from the British Museum collection.'},
+  {sceneIndex:18,globalSceneIndex:2064,dockerIndex:1,title:'Column Head',meta:'British Museum',description:'High-resolution 3D model of Column Head from the British Museum collection.'},
+  {sceneIndex:14,globalSceneIndex:2065,dockerIndex:4,title:'Conall Cael Bell',meta:'British Museum',description:'High-resolution 3D model of Conall Cael Bell from the British Museum collection.'},
+  {sceneIndex:17,globalSceneIndex:2066,dockerIndex:2,title:'Cuneiform Tablet',meta:'British Museum',description:'High-resolution 3D model of Cuneiform Tablet from the British Museum collection.'},
+  {sceneIndex:19,globalSceneIndex:2067,dockerIndex:1,title:'Cuneiform Tablet',meta:'British Museum',description:'High-resolution 3D model of Cuneiform Tablet from the British Museum collection.'},
+  {sceneIndex:20,globalSceneIndex:2068,dockerIndex:1,title:'Cuneiform Tablet Seal Impression',meta:'British Museum',description:'High-resolution 3D model of Cuneiform Tablet Seal Impression from the British Museum collection.'},
+  {sceneIndex:14,globalSceneIndex:2069,dockerIndex:3,title:'Cycladic Figurine',meta:'British Museum',description:'High-resolution 3D model of Cycladic Figurine from the British Museum collection.'},
+  {sceneIndex:18,globalSceneIndex:2070,dockerIndex:2,title:'Cypriot Limestone Head',meta:'British Museum',description:'High-resolution 3D model of Cypriot Limestone Head from the British Museum collection.'},
+  {sceneIndex:15,globalSceneIndex:2071,dockerIndex:4,title:'D4D4F4Ad67Ba436Cb5E155726Aa2Ebe3',meta:'British Museum',description:'High-resolution 3D model of D4D4F4Ad67Ba436Cb5E155726Aa2Ebe3 from the British Museum collection.'},
+  {sceneIndex:21,globalSceneIndex:2072,dockerIndex:1,title:'Drum Slab From The Amaravati Stupa',meta:'British Museum',description:'High-resolution 3D model of Drum Slab From The Amaravati Stupa from the British Museum collection.'},
+  {sceneIndex:15,globalSceneIndex:2073,dockerIndex:3,title:'Ec895C156Cb74Aeca8F79579Be3Dd60F',meta:'British Museum',description:'High-resolution 3D model of Ec895C156Cb74Aeca8F79579Be3Dd60F from the British Museum collection.'},
+  {sceneIndex:22,globalSceneIndex:2074,dockerIndex:1,title:'False Door Of Ptahshepses',meta:'British Museum',description:'High-resolution 3D model of False Door Of Ptahshepses from the British Museum collection.'},
+  {sceneIndex:23,globalSceneIndex:2075,dockerIndex:1,title:'Female Head',meta:'British Museum',description:'High-resolution 3D model of Female Head from the British Museum collection.'},
+  {sceneIndex:19,globalSceneIndex:2076,dockerIndex:2,title:'Figure Of Mictlantecuhtli',meta:'British Museum',description:'High-resolution 3D model of Figure Of Mictlantecuhtli from the British Museum collection.'},
+  {sceneIndex:16,globalSceneIndex:2077,dockerIndex:4,title:'Fired Clay Model Boat',meta:'British Museum',description:'High-resolution 3D model of Fired Clay Model Boat from the British Museum collection.'},
+  {sceneIndex:17,globalSceneIndex:2078,dockerIndex:4,title:'Fish Pond',meta:'British Museum',description:'High-resolution 3D model of Fish Pond from the British Museum collection.'},
+  {sceneIndex:16,globalSceneIndex:2079,dockerIndex:3,title:'Fragmentary Figure Of The Goddess Isis Serqet',meta:'British Museum',description:'High-resolution 3D model of Fragmentary Figure Of The Goddess Isis Serqet from the British Museum collection.'},
+  {sceneIndex:17,globalSceneIndex:2080,dockerIndex:3,title:'Germanicus',meta:'British Museum',description:'High-resolution 3D model of Germanicus from the British Museum collection.'},
+  {sceneIndex:18,globalSceneIndex:2081,dockerIndex:3,title:'Gladiator Helmet',meta:'British Museum',description:'High-resolution 3D model of Gladiator Helmet from the British Museum collection.'},
+  {sceneIndex:24,globalSceneIndex:2082,dockerIndex:1,title:'Granite Figure Of A Nandi Bull',meta:'British Museum',description:'High-resolution 3D model of Granite Figure Of A Nandi Bull from the British Museum collection.'},
+  {sceneIndex:19,globalSceneIndex:2083,dockerIndex:3,title:'Granodiorite Statue Of Sekhmet Standing',meta:'British Museum',description:'High-resolution 3D model of Granodiorite Statue Of Sekhmet Standing from the British Museum collection.'},
+  {sceneIndex:18,globalSceneIndex:2084,dockerIndex:4,title:'Grey Granite Papyrus Column Lower Section',meta:'British Museum',description:'High-resolution 3D model of Grey Granite Papyrus Column Lower Section from the British Museum collection.'},
+  {sceneIndex:19,globalSceneIndex:2085,dockerIndex:4,title:'Grimes Graves Goddess',meta:'British Museum',description:'High-resolution 3D model of Grimes Graves Goddess from the British Museum collection.'},
+  {sceneIndex:20,globalSceneIndex:2086,dockerIndex:3,title:'Gypsum Relief',meta:'British Museum',description:'High-resolution 3D model of Gypsum Relief from the British Museum collection.'},
+  {sceneIndex:21,globalSceneIndex:2087,dockerIndex:3,title:'Happisburgh Footprint',meta:'British Museum',description:'High-resolution 3D model of Happisburgh Footprint from the British Museum collection.'},
+  {sceneIndex:20,globalSceneIndex:2088,dockerIndex:4,title:'Head',meta:'British Museum',description:'High-resolution 3D model of Head from the British Museum collection.'},
+  {sceneIndex:22,globalSceneIndex:2089,dockerIndex:3,title:'Head Of A 19Th Dynasty Pharoah',meta:'British Museum',description:'High-resolution 3D model of Head Of A 19Th Dynasty Pharoah from the British Museum collection.'},
+  {sceneIndex:21,globalSceneIndex:2090,dockerIndex:4,title:'Head Of King Nectanebo I Or Ii',meta:'British Museum',description:'High-resolution 3D model of Head Of King Nectanebo I Or Ii from the British Museum collection.'},
+  {sceneIndex:23,globalSceneIndex:2091,dockerIndex:3,title:'Herte',meta:'British Museum',description:'High-resolution 3D model of Herte from the British Museum collection.'},
+  {sceneIndex:25,globalSceneIndex:2092,dockerIndex:1,title:'Hood Of Cherries',meta:'British Museum',description:'High-resolution 3D model of Hood Of Cherries from the British Museum collection.'},
+  {sceneIndex:22,globalSceneIndex:2093,dockerIndex:4,title:'Horus',meta:'British Museum',description:'High-resolution 3D model of Horus from the British Museum collection.'},
+  {sceneIndex:20,globalSceneIndex:2094,dockerIndex:2,title:'Horus',meta:'British Museum',description:'High-resolution 3D model of Horus from the British Museum collection.'},
+  {sceneIndex:26,globalSceneIndex:2095,dockerIndex:1,title:'Horus Falcon',meta:'British Museum',description:'High-resolution 3D model of Horus Falcon from the British Museum collection.'},
+  {sceneIndex:21,globalSceneIndex:2096,dockerIndex:2,title:'Huaxtec Figure',meta:'British Museum',description:'High-resolution 3D model of Huaxtec Figure from the British Museum collection.'},
+  {sceneIndex:22,globalSceneIndex:2097,dockerIndex:2,title:'Ivory Staff Terminal From Alcester',meta:'British Museum',description:'High-resolution 3D model of Ivory Staff Terminal From Alcester from the British Museum collection.'},
+  {sceneIndex:24,globalSceneIndex:2098,dockerIndex:3,title:'Julius Caesar',meta:'British Museum',description:'High-resolution 3D model of Julius Caesar from the British Museum collection.'},
+  {sceneIndex:25,globalSceneIndex:2099,dockerIndex:3,title:'Kore Girl Holding A Bird As An Offering',meta:'British Museum',description:'High-resolution 3D model of Kore Girl Holding A Bird As An Offering from the British Museum collection.'},
+  {sceneIndex:23,globalSceneIndex:2100,dockerIndex:4,title:'Kouros Head Didyma Scupltures',meta:'British Museum',description:'High-resolution 3D model of Kouros Head Didyma Scupltures from the British Museum collection.'},
+  {sceneIndex:24,globalSceneIndex:2101,dockerIndex:4,title:'Laas Geel Rock Art Somaliland',meta:'British Museum',description:'High-resolution 3D model of Laas Geel Rock Art Somaliland from the British Museum collection.'},
+  {sceneIndex:26,globalSceneIndex:2102,dockerIndex:3,title:'Lamp Roman',meta:'British Museum',description:'High-resolution 3D model of Lamp Roman from the British Museum collection.'},
+  {sceneIndex:25,globalSceneIndex:2103,dockerIndex:4,title:'Leda And The Swan',meta:'British Museum',description:'High-resolution 3D model of Leda And The Swan from the British Museum collection.'},
+  {sceneIndex:23,globalSceneIndex:2104,dockerIndex:2,title:'Limestone Capital',meta:'British Museum',description:'High-resolution 3D model of Limestone Capital from the British Museum collection.'},
+  {sceneIndex:26,globalSceneIndex:2105,dockerIndex:4,title:'Limestone Stela',meta:'British Museum',description:'High-resolution 3D model of Limestone Stela from the British Museum collection.'},
+  {sceneIndex:24,globalSceneIndex:2106,dockerIndex:2,title:'Lower Half Of Gudea Statue Presumed',meta:'British Museum',description:'High-resolution 3D model of Lower Half Of Gudea Statue Presumed from the British Museum collection.'},
+  {sceneIndex:27,globalSceneIndex:2107,dockerIndex:4,title:'Marble Torso Of A Charioteer',meta:'British Museum',description:'High-resolution 3D model of Marble Torso Of A Charioteer from the British Museum collection.'},
+  {sceneIndex:27,globalSceneIndex:2108,dockerIndex:1,title:'Marcus Aurelius',meta:'British Museum',description:'High-resolution 3D model of Marcus Aurelius from the British Museum collection.'},
+  {sceneIndex:25,globalSceneIndex:2109,dockerIndex:2,title:'Monumental Diorite Scarab Beetle',meta:'British Museum',description:'High-resolution 3D model of Monumental Diorite Scarab Beetle from the British Museum collection.'},
+  {sceneIndex:28,globalSceneIndex:2110,dockerIndex:1,title:'Mot Here',meta:'British Museum',description:'High-resolution 3D model of Mot Here from the British Museum collection.'},
+  {sceneIndex:28,globalSceneIndex:2111,dockerIndex:4,title:'Murder Weapon Oa 1817',meta:'British Museum',description:'High-resolution 3D model of Murder Weapon Oa 1817 from the British Museum collection.'},
+  {sceneIndex:26,globalSceneIndex:2112,dockerIndex:2,title:'Nereid Monument Lion',meta:'British Museum',description:'High-resolution 3D model of Nereid Monument Lion from the British Museum collection.'},
+  {sceneIndex:29,globalSceneIndex:2113,dockerIndex:1,title:'Nereid Statue',meta:'British Museum',description:'High-resolution 3D model of Nereid Statue from the British Museum collection.'},
+  {sceneIndex:27,globalSceneIndex:2114,dockerIndex:3,title:'Offering Table Of Nesptah',meta:'British Museum',description:'High-resolution 3D model of Offering Table Of Nesptah from the British Museum collection.'},
+  {sceneIndex:29,globalSceneIndex:2115,dockerIndex:4,title:'Portrait Bust Of Claudia Olympias',meta:'British Museum',description:'High-resolution 3D model of Portrait Bust Of Claudia Olympias from the British Museum collection.'},
+  {sceneIndex:30,globalSceneIndex:2116,dockerIndex:1,title:'Prince Khaemwaset',meta:'British Museum',description:'High-resolution 3D model of Prince Khaemwaset from the British Museum collection.'},
+  {sceneIndex:27,globalSceneIndex:2117,dockerIndex:2,title:'Railing Pillar',meta:'British Museum',description:'High-resolution 3D model of Railing Pillar from the British Museum collection.'},
+  {sceneIndex:28,globalSceneIndex:2118,dockerIndex:2,title:'Railing Pillar From The Amaravati Stupa',meta:'British Museum',description:'High-resolution 3D model of Railing Pillar From The Amaravati Stupa from the British Museum collection.'},
+  {sceneIndex:29,globalSceneIndex:2119,dockerIndex:2,title:'Relief',meta:'British Museum',description:'High-resolution 3D model of Relief from the British Museum collection.'},
+  {sceneIndex:30,globalSceneIndex:2120,dockerIndex:4,title:'Roman Inscription Block',meta:'British Museum',description:'High-resolution 3D model of Roman Inscription Block from the British Museum collection.'},
+  {sceneIndex:30,globalSceneIndex:2121,dockerIndex:2,title:'Seated Statue Of Amenhotep Iii',meta:'British Museum',description:'High-resolution 3D model of Seated Statue Of Amenhotep Iii from the British Museum collection.'},
+  {sceneIndex:31,globalSceneIndex:2122,dockerIndex:2,title:'Sekhmet',meta:'British Museum',description:'High-resolution 3D model of Sekhmet from the British Museum collection.'},
+  {sceneIndex:31,globalSceneIndex:2123,dockerIndex:1,title:'Sekhmet Head Fragment',meta:'British Museum',description:'High-resolution 3D model of Sekhmet Head Fragment from the British Museum collection.'},
+  {sceneIndex:32,globalSceneIndex:2124,dockerIndex:2,title:'Septimius Severus',meta:'British Museum',description:'High-resolution 3D model of Septimius Severus from the British Museum collection.'},
+  {sceneIndex:33,globalSceneIndex:2125,dockerIndex:2,title:'Sheffield Anglo Saxon Cross Shaft',meta:'British Museum',description:'High-resolution 3D model of Sheffield Anglo Saxon Cross Shaft from the British Museum collection.'},
+  {sceneIndex:28,globalSceneIndex:2126,dockerIndex:3,title:'Socrates',meta:'British Museum',description:'High-resolution 3D model of Socrates from the British Museum collection.'},
+  {sceneIndex:31,globalSceneIndex:2127,dockerIndex:4,title:'St Albans Badge 1856 0701 2095',meta:'British Museum',description:'High-resolution 3D model of St Albans Badge 1856 0701 2095 from the British Museum collection.'},
+  {sceneIndex:32,globalSceneIndex:2128,dockerIndex:4,title:'St Thomas Becket Ampulla',meta:'British Museum',description:'High-resolution 3D model of St Thomas Becket Ampulla from the British Museum collection.'},
+  {sceneIndex:29,globalSceneIndex:2129,dockerIndex:3,title:'Statue',meta:'British Museum',description:'High-resolution 3D model of Statue from the British Museum collection.'},
+  {sceneIndex:32,globalSceneIndex:2130,dockerIndex:1,title:'Statue Neo Assyrian Temple Of Nabu',meta:'British Museum',description:'High-resolution 3D model of Statue Neo Assyrian Temple Of Nabu from the British Museum collection.'},
+  {sceneIndex:33,globalSceneIndex:2131,dockerIndex:4,title:'Statue Of A Priest',meta:'British Museum',description:'High-resolution 3D model of Statue Of A Priest from the British Museum collection.'},
+  {sceneIndex:34,globalSceneIndex:2132,dockerIndex:2,title:'Statue Of A Woman',meta:'British Museum',description:'High-resolution 3D model of Statue Of A Woman from the British Museum collection.'},
+  {sceneIndex:30,globalSceneIndex:2133,dockerIndex:3,title:'Statue Of A Worshipper',meta:'British Museum',description:'High-resolution 3D model of Statue Of A Worshipper from the British Museum collection.'},
+  {sceneIndex:31,globalSceneIndex:2134,dockerIndex:3,title:'Statue Of Asclepius',meta:'British Museum',description:'High-resolution 3D model of Statue Of Asclepius from the British Museum collection.'},
+  {sceneIndex:33,globalSceneIndex:2135,dockerIndex:1,title:'Statue Of The Ram Of Amun',meta:'British Museum',description:'High-resolution 3D model of Statue Of The Ram Of Amun from the British Museum collection.'},
+  {sceneIndex:32,globalSceneIndex:2136,dockerIndex:3,title:'Stela Winepress',meta:'British Museum',description:'High-resolution 3D model of Stela Winepress from the British Museum collection.'},
+  {sceneIndex:33,globalSceneIndex:2137,dockerIndex:3,title:'Stone Funerary Relief',meta:'British Museum',description:'High-resolution 3D model of Stone Funerary Relief from the British Museum collection.'},
+  {sceneIndex:34,globalSceneIndex:2138,dockerIndex:4,title:'Tablet',meta:'British Museum',description:'High-resolution 3D model of Tablet from the British Museum collection.'},
+  {sceneIndex:34,globalSceneIndex:2139,dockerIndex:1,title:'Tablet',meta:'British Museum',description:'High-resolution 3D model of Tablet from the British Museum collection.'},
+  {sceneIndex:35,globalSceneIndex:2140,dockerIndex:1,title:'The Apotheosis Of Homer',meta:'British Museum',description:'High-resolution 3D model of The Apotheosis Of Homer from the British Museum collection.'},
+  {sceneIndex:34,globalSceneIndex:2141,dockerIndex:3,title:'The Beaune Dirk',meta:'British Museum',description:'High-resolution 3D model of The Beaune Dirk from the British Museum collection.'},
+  {sceneIndex:35,globalSceneIndex:2142,dockerIndex:3,title:'The Jennings Dog',meta:'British Museum',description:'High-resolution 3D model of The Jennings Dog from the British Museum collection.'},
+  {sceneIndex:35,globalSceneIndex:2143,dockerIndex:2,title:'The Jericho Skull',meta:'British Museum',description:'High-resolution 3D model of The Jericho Skull from the British Museum collection.'},
+  {sceneIndex:36,globalSceneIndex:2144,dockerIndex:3,title:'The Lancaster Cross',meta:'British Museum',description:'High-resolution 3D model of The Lancaster Cross from the British Museum collection.'},
+  {sceneIndex:35,globalSceneIndex:2145,dockerIndex:4,title:'The Left Prudhoe Lion',meta:'British Museum',description:'High-resolution 3D model of The Left Prudhoe Lion from the British Museum collection.'},
+  {sceneIndex:36,globalSceneIndex:2146,dockerIndex:4,title:'The Luzira Head',meta:'British Museum',description:'High-resolution 3D model of The Luzira Head from the British Museum collection.'},
+  {sceneIndex:36,globalSceneIndex:2147,dockerIndex:2,title:'The Map Of The World Tablet',meta:'British Museum',description:'High-resolution 3D model of The Map Of The World Tablet from the British Museum collection.'},
+  {sceneIndex:37,globalSceneIndex:2148,dockerIndex:4,title:'The Marion Kouros',meta:'British Museum',description:'High-resolution 3D model of The Marion Kouros from the British Museum collection.'},
+  {sceneIndex:36,globalSceneIndex:2149,dockerIndex:1,title:'The Oxborough Dirk',meta:'British Museum',description:'High-resolution 3D model of The Oxborough Dirk from the British Museum collection.'},
+  {sceneIndex:37,globalSceneIndex:2150,dockerIndex:3,title:'The Right Prudhoe Lion',meta:'British Museum',description:'High-resolution 3D model of The Right Prudhoe Lion from the British Museum collection.'},
+  {sceneIndex:37,globalSceneIndex:2151,dockerIndex:1,title:'The Rosetta Stone',meta:'British Museum',description:'High-resolution 3D model of The Rosetta Stone from the British Museum collection.'},
+  {sceneIndex:38,globalSceneIndex:2152,dockerIndex:3,title:'The Spinario Iteration 2',meta:'British Museum',description:'High-resolution 3D model of The Spinario Iteration 2 from the British Museum collection.'},
+  {sceneIndex:37,globalSceneIndex:2153,dockerIndex:2,title:'The Strangford Apollo',meta:'British Museum',description:'High-resolution 3D model of The Strangford Apollo from the British Museum collection.'},
+  {sceneIndex:39,globalSceneIndex:2154,dockerIndex:3,title:'The Townley Greyhounds Draft',meta:'British Museum',description:'High-resolution 3D model of The Townley Greyhounds Draft from the British Museum collection.'},
+  {sceneIndex:38,globalSceneIndex:2155,dockerIndex:4,title:'Thomas Becket Head Reliquary Badge',meta:'British Museum',description:'High-resolution 3D model of Thomas Becket Head Reliquary Badge from the British Museum collection.'},
+  {sceneIndex:38,globalSceneIndex:2156,dockerIndex:1,title:'Virgin And Child',meta:'British Museum',description:'High-resolution 3D model of Virgin And Child from the British Museum collection.'},
+  {sceneIndex:38,globalSceneIndex:2157,dockerIndex:2,title:'Votive Figure',meta:'British Museum',description:'High-resolution 3D model of Votive Figure from the British Museum collection.'},
+  {sceneIndex:39,globalSceneIndex:2158,dockerIndex:2,title:'Votive Offering',meta:'British Museum',description:'High-resolution 3D model of Votive Offering from the British Museum collection.'},
+  {sceneIndex:39,globalSceneIndex:2159,dockerIndex:1,title:'Xing Hou Gui',meta:'British Museum',description:'High-resolution 3D model of Xing Hou Gui from the British Museum collection.'}
+];
+
+const cameras = {
+  camera1:[.974174,0,-.014282,-.055994,-.004531,1.704247,-.309066,-.067883,0,0,0,.01,-.014424,-.178459,-.983842,.563640],
+  camera2:[.650398,0,-.725397,.040743,.161630,1.718393,.144919,-.236218,0,0,0,.01,-.738677,.125334,-.662305,.315036],
+  camera3:[-.698965,0,-.678724,.062357,-1.152657,.512186,1.187032,-.085197,0,0,0,.01,-.206005,-.955277,.212149,.460692],
+  camera4:[.924031,0,-.308846,-.045320,-.189948,1.625100,-.568304,-.306057,0,0,0,.01,-.297425,-.345953,-.889862,.112355]
+};
+
+const statusEl = document.getElementById('status');
+const telemetryEl = document.getElementById('telemetry');
+const renderTelemetryEl = document.getElementById('render-telemetry');
+const image = document.getElementById('image');
+const view = document.getElementById('view');
+const carousel = document.getElementById('carousel');
+const artifactName = document.getElementById('artifactName');
+const artifactMeta = document.getElementById('artifactMeta');
+const artifactDescription = document.getElementById('artifactDescription');
+
+let sceneIndex = artifacts[0].sceneIndex;
+let selectedArtifact = artifacts[0];
+let active = false;
+let mobileMoving = false;
+let touchLookId = null;
+let touchLookX = 0;
+let touchLookY = 0;
+let keys = new Set();
+let position = [0,0,1];
+let yaw = -Math.PI/2;
+let pitch = 0;
+let orbiting = false;
+let orbitAngle = 0;
+const orbitRadius = 1;
+let lastMove = performance.now();
+let lastImageUrl = null;
+let requestId = 0;
+let displayedId = 0;
+let motionQueued = false;
+let settlingFrames = 0;
+const receivedFrames = [];
+let lastFrameReceivedAt = 0;
+
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>{const n=Math.hypot(...a);return a.map(x=>x/n)};
+
+function matrix() {
+  const aspect=RENDER_ASPECT, fy=1/Math.tan(Math.PI/6), fx=fy/aspect;
+  const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]);
+  const r=norm(cross(f,[0,1,0])), u=cross(r,f);
+  const v=[
+    r[0],r[1],r[2],-dot(r,position),
+    u[0],u[1],u[2],-dot(u,position),
+    -f[0],-f[1],-f[2],dot(f,position),
+    0,0,0,1
+  ];
+  return [
+    fx*v[0],fx*v[1],fx*v[2],fx*v[3],
+    fy*v[4],fy*v[5],fy*v[6],fy*v[7],
+    0,0,0,.01,
+    -v[8],-v[9],-v[10],-v[11]
+  ];
+}
+
+function worldTransform() {
+  const c=Math.cos(orbitAngle), s=Math.sin(orbitAngle);
+  return [
+    c,0,s,0,
+    0,1,0,0,
+    -s,0,c,0,
+    0,0,0,1
+  ];
+}
+
+function applyCameraMatrix(cameraMatrix) {
+  const aspect=RENDER_ASPECT,fy=1/Math.tan(Math.PI/6),fx=fy/aspect;
+  const right=cameraMatrix.slice(0,3).map(x=>x/fx);
+  const up=cameraMatrix.slice(4,7).map(x=>x/fy);
+  const back=cameraMatrix.slice(12,15).map(x=>-x);
+  const translation=[cameraMatrix[3]/fx,cameraMatrix[7]/fy,-cameraMatrix[15]];
+  position=[0,1,2].map(i=>-right[i]*translation[0]-up[i]*translation[1]-back[i]*translation[2]);
+  const forward=back.map(x=>-x);
+  yaw=Math.atan2(forward[2],forward[0]);
+  pitch=Math.asin(Math.max(-1,Math.min(1,forward[1])));
+}
+
+function recordFrameReceived() {
+  const now=performance.now();
+  // Do not average an idle period into the active rendering cadence.
+  if(lastFrameReceivedAt && now-lastFrameReceivedAt>500) receivedFrames.length=0;
+  receivedFrames.push(now);
+  lastFrameReceivedAt=now;
+  if(receivedFrames.length>10) receivedFrames.shift();
+}
+
+function updateTelemetry() {
+  if(!receivedFrames.length) {
+    telemetryEl.textContent='Client: async, 30 FPS cap · Last frame received: —';
+    return;
+  }
+  const now=performance.now(), last=receivedFrames.at(-1);
+  const age=((now-last)/1000).toFixed(2);
+  let average='—';
+  let interval='—';
+  let fps='—';
+  if(receivedFrames.length>1)
+    average=`${Math.round((last-receivedFrames[0])/(receivedFrames.length-1))} ms`;
+  if(receivedFrames.length>1) {
+    const delta=last-receivedFrames[receivedFrames.length-2];
+    interval=`${Math.round(delta)} ms`;
+    fps=`${(1000/delta).toFixed(1)}`;
+  }
+  telemetryEl.textContent=`Client: async, 30 FPS cap · Last frame received: ${age} s ago · Current interval: ${interval} (${fps} FPS) · ${receivedFrames.length}-frame receive average: ${average}`;
+}
+setInterval(updateTelemetry,100);
+
+function updateRenderTelemetry(headers) {
+  const value=name=>headers.get(name);
+  const render=value('X-Render-Ms'),
+        raster=value('X-Raster-Ms'),
+        jpeg=value('X-Jpeg-Encode-Ms'),
+        base64=value('X-Base64-Encode-Ms'),
+        message=value('X-Message-Create-Ms'),
+        bytes=value('X-Jpeg-Bytes');
+  if(!render) return;
+  renderTelemetryEl.textContent =
+    `Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
+}
+
+async function issueRender(cameraMatrix) {
+  const id=++requestId;
+  try {
+    const response=await fetch(lambdaUrls[selectedArtifact.dockerIndex-1] || lambdaUrl,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sceneIndex,worldTransform:worldTransform(),viewProjection:cameraMatrix})
+    });
+    if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
+    updateRenderTelemetry(response.headers);
+    const jpeg=await response.blob();
+    recordFrameReceived();
+    if(id>=displayedId) {
+      displayedId=id;
+      if(lastImageUrl) URL.revokeObjectURL(lastImageUrl);
+      lastImageUrl=URL.createObjectURL(jpeg);
+      image.src=lastImageUrl;
+      let frameTiming='— FPS';
+      if(receivedFrames.length>1) {
+        const averageInterval=(receivedFrames.at(-1)-receivedFrames[0])/(receivedFrames.length-1);
+        frameTiming=`${(1000/averageInterval).toFixed(1)} FPS`;
+      }
+      statusEl.textContent=`Scene ${selectedArtifact.globalSceneIndex} · ${frameTiming}`;
+    }
+  } catch(error) {
+    statusEl.textContent=error.message;
+  }
+}
+
+function noteMovement() {
+  motionQueued=true;
+}
+
+function isMoving() {
+  return (active || mobileMoving) && keys.size>0;
+}
+
+function asyncTick() {
+  if(isMoving() || motionQueued) {
+    motionQueued=false;
+    settlingFrames=2;
+    issueRender(matrix());
+  } else if(settlingFrames>0) {
+    settlingFrames--;
+    issueRender(matrix());
+  }
+  setTimeout(asyncTick,1000/ASYNC_FPS);
+}
+asyncTick();
+
+function tick(now) {
+  const dt=Math.min(.05,(now-lastMove)/1000);
+  lastMove=now;
+  if(orbiting) {
+    orbitAngle=(orbitAngle+dt*0.8)%(Math.PI*2);
+    motionQueued=true;
+  }
+  if(isMoving()) {
+    const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]);
+    const r=norm(cross(f,[0,1,0]));
+    const speed=MOVE_SPEED*(keys.has('ShiftLeft')||keys.has('ShiftRight')?.1:1);
+    if(keys.has('KeyW')) position=position.map((x,i)=>x+f[i]*speed*dt);
+    if(keys.has('KeyS')) position=position.map((x,i)=>x-f[i]*speed*dt);
+    if(keys.has('KeyD')) position=position.map((x,i)=>x+r[i]*speed*dt);
+    if(keys.has('KeyA')) position=position.map((x,i)=>x-r[i]*speed*dt);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function placeholderThumb(index) {
+  const hue = 24 + index*17;
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 22% 28%)"/>
+        <stop offset="1" stop-color="hsl(${hue+28} 16% 10%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="300" fill="url(#g)"/>
+    <circle cx="200" cy="118" r="${42+(index%3)*10}" fill="rgba(238,226,205,.72)"/>
+    <rect x="145" y="164" width="110" height="70" rx="14" fill="rgba(238,226,205,.62)"/>
+    <text x="200" y="272" text-anchor="middle" font-family="Arial" font-size="27" fill="#fff">MODEL ${index}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+function selectArtifact(index) {
+  sceneIndex=index;
+  orbiting=false;
+  document.getElementById('orbitView').classList.remove('active');
+  orbitAngle=0;
+  position=[0,0,1];
+  yaw=-Math.PI/2;
+  pitch=0;
+  const artifact=artifacts.find(item=>item.globalSceneIndex===index) || artifacts[0];
+  sceneIndex=artifact.sceneIndex;
+  selectedArtifact=artifact;
+  artifactName.textContent=artifact.title;
+  artifactMeta.textContent=artifact.meta;
+  artifactDescription.textContent=artifact.description;
+  document.querySelectorAll('.artifact').forEach(el=>el.classList.toggle('active',Number(el.dataset.scene)===index));
+  // Render the selected scene immediately using the current camera.
+  issueRender(matrix());
+}
+
+artifacts.forEach((artifact,i)=>{
+  const button=document.createElement('button');
+  button.className='artifact'+(i===0?' active':''); button.dataset.scene=artifact.globalSceneIndex;
+  button.type='button';
+  button.innerHTML=`
+    <img src="${placeholderThumb(artifact.globalSceneIndex)}" alt="${artifact.title}">
+    <span class="artifact-title">${artifact.title}</span>
+    <span class="artifact-scene">Scene ${artifact.globalSceneIndex}</span>`;
+  button.addEventListener('click',()=>selectArtifact(artifact.globalSceneIndex));
+  carousel.append(button);
+});
+
+// Start one unit in front of the origin-centered artifact, matching scenes 2001–2159.
+position=[0,0,1];
+yaw=-Math.PI/2;
+pitch=0;
+
+view.addEventListener('mousedown',event=>{
+  if(event.target.closest('button')) return;
+  if(event.button===2){
+    event.preventDefault();
+    if(document.pointerLockElement===view) document.exitPointerLock();
+    return;
+  }
+  if(event.button===0){
+    view.requestPointerLock();
+  }
+});
+view.addEventListener('contextmenu',event=>{
+  event.preventDefault();
+  if(document.pointerLockElement===view){
+    document.exitPointerLock();
+  }
+});
+view.addEventListener('touchstart',event=>{
+  if(event.target.closest('button') || touchLookId!==null) return;
+  const touch=event.changedTouches[0];
+  if(!touch) return;
+  event.preventDefault();
+  touchLookId=touch.identifier;
+  touchLookX=touch.clientX;
+  touchLookY=touch.clientY;
+  active=true;
+  statusEl.textContent=`Scene ${sceneIndex} · touch look active`;
+  noteMovement();
+},{passive:false});
+view.addEventListener('touchmove',event=>{
+  if(touchLookId===null) return;
+  const touch=[...event.changedTouches].find(item=>item.identifier===touchLookId);
+  if(!touch) return;
+  event.preventDefault();
+  yaw+=(touch.clientX-touchLookX)*.004;
+  pitch=Math.max(-1.54,Math.min(1.54,pitch-(touch.clientY-touchLookY)*.004));
+  touchLookX=touch.clientX;
+  touchLookY=touch.clientY;
+  noteMovement();
+},{passive:false});
+function endTouchLook(event){
+  if(touchLookId===null) return;
+  const ended=[...event.changedTouches].some(item=>item.identifier===touchLookId);
+  if(!ended) return;
+  touchLookId=null;
+  active=false;
+  statusEl.textContent=`Scene ${sceneIndex} · touch look released`;
+}
+view.addEventListener('touchend',endTouchLook,{passive:false});
+view.addEventListener('touchcancel',endTouchLook,{passive:false});
+document.addEventListener('pointerlockchange',()=>{
+  active=document.pointerLockElement===view;
+  statusEl.textContent=active?`Scene ${sceneIndex} · free look active`:`Scene ${sceneIndex} · free look released`;
+  if(active) noteMovement();
+});
+
+document.addEventListener('contextmenu',event=>{
+  if(active && view.contains(event.target)) event.preventDefault();
+});
+document.addEventListener('mousemove',event=>{
+  if(!active) return;
+  yaw+=event.movementX*.002;
+  pitch=Math.max(-1.54,Math.min(1.54,pitch-event.movementY*.002));
+  noteMovement();
+});
+document.addEventListener('keydown',event=>{
+  if(active) {
+    keys.add(event.code);
+    noteMovement();
+    event.preventDefault();
+  }
+});
+document.addEventListener('keyup',event=>keys.delete(event.code));
+
+document.querySelectorAll('.mobile-pad button').forEach(button=>{
+  const key=button.dataset.key;
+  const press=event=>{
+    event.preventDefault();
+    mobileMoving=true;
+    keys.add(key);
+    noteMovement();
+    button.setPointerCapture?.(event.pointerId);
+  };
+  const release=event=>{
+    event.preventDefault();
+    keys.delete(key);
+    mobileMoving=[...keys].some(item=>item.startsWith('Key'));
+  };
+  button.addEventListener('pointerdown',press);
+  button.addEventListener('pointerup',release);
+  button.addEventListener('pointercancel',release);
+  button.addEventListener('pointerleave',event=>{ if(event.buttons===0) release(event); });
+});
+
+document.getElementById('resetView').addEventListener('click',event=>{
+  event.stopPropagation();
+  orbiting=false;
+  document.getElementById('orbitView').classList.remove('active');
+  orbitAngle=0;
+  position=[0,0,1];
+  yaw=-Math.PI/2;
+  pitch=0;
+  issueRender(matrix());
+});
+document.getElementById('orbitView').addEventListener('click',event=>{
+  event.stopPropagation();
+  orbiting=!orbiting;
+  document.getElementById('orbitView').classList.toggle('active',orbiting);
+  if(orbiting) {
+    statusEl.textContent=`Scene ${sceneIndex} · orbiting`;
+  } else {
+    statusEl.textContent=`Scene ${sceneIndex} · orbit stopped`;
+  }
+  motionQueued=true;
+});
+document.getElementById('fullscreen').addEventListener('click',event=>{
+  event.stopPropagation();
+  if(!document.fullscreenElement) view.requestFullscreen?.();
+  else document.exitFullscreen?.();
+});
+
+// Initial scene render and catalogue selection.
+selectArtifact(1);
+</script>
+</body>
+</html>
