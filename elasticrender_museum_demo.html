@@ -439,9 +439,7 @@
 const lambdaUrl = 'https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
 const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
-// The test Lambda is currently rendering at 1920x1080. Keep the client-side
-// projection/deprojection math aligned with that backend aspect ratio.
-const RENDER_ASPECT = 1920 / 1080;
+const RENDER_ASPECT = 576 / 576;
 
 // Catalogue metadata matched to the ten meshes used by scenes 1001–1010.
 const artifacts = [
