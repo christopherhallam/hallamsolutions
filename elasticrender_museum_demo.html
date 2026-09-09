@@ -439,7 +439,9 @@
 const lambdaUrl = 'https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
 const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
-const RENDER_ASPECT = 576 / 576;
+const RENDER_WIDTH = 576;
+const RENDER_HEIGHT = 576;
+const RENDER_ASPECT = RENDER_WIDTH / RENDER_HEIGHT;
 
 // Catalogue metadata matched to the ten meshes used by scenes 1001–1010.
 const artifacts = [
@@ -587,7 +589,7 @@ async function issueRender(cameraMatrix) {
     const response=await fetch(lambdaUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sceneIndex,worldTransform:worldTransform(),viewProjection:cameraMatrix})
+      body:JSON.stringify({sceneIndex,resolution:[RENDER_WIDTH,RENDER_HEIGHT],worldTransform:worldTransform(),viewProjection:cameraMatrix})
     });
     if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
     updateRenderTelemetry(response.headers);
