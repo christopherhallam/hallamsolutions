@@ -56,10 +56,10 @@ view.addEventListener('mousedown',event=>{if(event.button===2){event.preventDefa
 view.addEventListener('contextmenu',event=>{event.preventDefault();if(document.pointerLockElement===view)document.exitPointerLock()});
 document.addEventListener('pointerlockchange',()=>{active=document.pointerLockElement===view;status.textContent=active?'1080p  |  Free look active':'1080p  |  Ready'});
 document.addEventListener('mousemove',event=>{if(!active)return;yaw+=event.movementX*.002;pitch=Math.max(-1.54,Math.min(1.54,pitch-event.movementY*.002));movementQueued=true});
-document.addEventListener('keydown',event=>{if(!active)return;if(['KeyW','KeyA','KeyS','KeyD'].includes(event.code)){keys.add(event.code);event.preventDefault()}});
+document.addEventListener('keydown',event=>{if(!active)return;if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight'].includes(event.code)){keys.add(event.code);event.preventDefault()}});
 document.addEventListener('keyup',event=>keys.delete(event.code));
 let settlingFrames=0;
-function tick(now){const dt=Math.min(.05,(now-lastMove)/1000);lastMove=now;if(active&&keys.size){const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]),r=norm(cross(f,[0,1,0])),speed=2;if(keys.has('KeyW'))position=position.map((x,i)=>x+f[i]*speed*dt);if(keys.has('KeyS'))position=position.map((x,i)=>x-f[i]*speed*dt);if(keys.has('KeyD'))position=position.map((x,i)=>x+r[i]*speed*dt);if(keys.has('KeyA'))position=position.map((x,i)=>x-r[i]*speed*dt);movementQueued=true}requestAnimationFrame(tick)}
+function tick(now){const dt=Math.min(.05,(now-lastMove)/1000);lastMove=now;if(active&&keys.size){const f=norm([Math.cos(pitch)*Math.cos(yaw),Math.sin(pitch),Math.cos(pitch)*Math.sin(yaw)]),r=norm(cross(f,[0,1,0])),speed=2*(keys.has('ShiftLeft')||keys.has('ShiftRight')?.1:1);if(keys.has('KeyW'))position=position.map((x,i)=>x+f[i]*speed*dt);if(keys.has('KeyS'))position=position.map((x,i)=>x-f[i]*speed*dt);if(keys.has('KeyD'))position=position.map((x,i)=>x+r[i]*speed*dt);if(keys.has('KeyA'))position=position.map((x,i)=>x-r[i]*speed*dt);movementQueued=true}requestAnimationFrame(tick)}
 function asyncTick(){if(movementQueued){movementQueued=false;settlingFrames=1;renderWidth=960;renderHeight=540;issueRender(matrix())}else if(settlingFrames>0){settlingFrames--;renderWidth=1920;renderHeight=1080;issueRender(matrix())}setTimeout(asyncTick,1000/30)}requestAnimationFrame(tick);asyncTick();
  select('camera1',shots.firstElementChild);
 </script>
