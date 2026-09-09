@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ElasticRender · Castle of Loarre</title>
+<style>
+:root{color-scheme:dark;--bg:#10161e;--panel:#1d2733;--line:#314050;--blue:#2098ed;--muted:#c6d0dc}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:var(--bg);color:#f4f7fb}
+body{min-height:100vh}header{height:66px;border-bottom:1px solid #293442;display:flex;align-items:center;padding:0 22px;gap:25px;background:#111923}
+.brand{font-size:25px;font-weight:750;letter-spacing:-.04em}.brand span{color:var(--blue)}.divider{height:24px;border-left:1px solid #53606d}.title{font-size:25px;font-weight:650}.tagline{color:#dbe1e8;font-size:14px}.nav{margin-left:auto;display:flex;gap:30px;color:#edf2f7}.nav a{color:inherit;text-decoration:none}
+.layout{display:grid;grid-template-columns:310px minmax(0,1fr);min-height:calc(100vh - 66px)}aside{padding:18px 20px;background:#111a24;border-right:1px solid #202d39;overflow:auto}aside h2{font-size:19px;margin:0 0 8px}aside p{color:var(--muted);font-size:14px;line-height:1.45;margin:0 0 14px}.shots{display:grid;gap:14px}.shot{border:1px solid #40505e;background:#1a2530;border-radius:6px;overflow:hidden;padding:0;color:#fff;text-align:left;cursor:pointer;transition:.15s;border-width:1px}.shot:hover,.shot.active{border:2px solid var(--blue)}.shot img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}.shot-label{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(8,13,18,.84);font-size:14px}.number{width:28px;height:28px;border-radius:6px;background:#edf1f4;color:#1a2027;display:grid;place-items:center;font-weight:700;font-size:16px}
+main{position:relative;display:flex;align-items:center;justify-content:center;padding:14px 18px;background:radial-gradient(circle at 65% 45%,#202934 0,#151c24 53%,#10161d 100%)}.render-wrap{position:relative;width:min(100%,1200px);aspect-ratio:16/9;background:#0b0e11;box-shadow:0 20px 70px #0008;border-radius:7px;overflow:hidden}.render-wrap img{width:100%;height:100%;display:block;object-fit:contain}.info{position:absolute;left:16px;top:14px;max-width:360px;background:#293540e8;border:1px solid #52616e;border-radius:9px;padding:14px 17px}.info h1{font-size:27px;line-height:1.1;margin:0 0 4px}.info .place{font-size:16px;margin-bottom:8px}.info p{color:#d6dee7;font-size:14px;line-height:1.35;margin:0}.status{position:absolute;right:14px;top:14px;background:#27323d;border:1px solid #394754;border-radius:9px;padding:10px 13px;color:#dce4ec;font-size:14px}.controls{position:absolute;left:16px;bottom:15px;background:#26313bdf;border-radius:8px;padding:10px 14px;color:#f1f5f8;font-size:14px;line-height:1.7}.controls kbd{display:inline-grid;place-items:center;width:24px;height:24px;border:1px solid #dbe2e8;border-radius:50%;margin-right:8px;font-size:12px}.error{position:absolute;inset:auto 16px 16px auto;color:#ffb4b4;font-size:13px;max-width:55%;text-align:right}
+@media(max-width:800px){header{padding:0 14px;gap:12px}.title{font-size:19px}.tagline,.divider,.nav{display:none}.layout{display:block}aside{border-right:0;border-bottom:1px solid #293442;padding:14px}.shots{display:flex;overflow-x:auto;gap:10px}.shot{min-width:190px}.shot-label{padding:6px 8px}.number{width:24px;height:24px}main{padding:12px 8px;min-height:56vw}.info{left:10px;top:10px;padding:9px 11px;max-width:65%}.info h1{font-size:18px}.info p,.controls{font-size:12px}.status{top:10px;right:10px;font-size:12px;padding:7px}.controls{left:10px;bottom:10px}}
+</style>
+</head>
+<body>
+<header><div class="brand">Elastic<span>Render</span></div><div class="divider"></div><div class="title">Castle of Loarre</div><div class="tagline">Real places. Interactive views.</div><nav class="nav"><a href="#about">About</a><a href="#technology">Technology</a><a href="#contact">Contact</a></nav></header>
+<div class="layout">
+<aside><h2>Photographic viewpoints</h2><p>Select a photograph to jump to the matching camera view in the 3D render.</p><div class="shots" id="shots"></div></aside>
+<main><div class="render-wrap"><img id="render" alt="Rendered Castle of Loarre view"><div class="info"><h1>Castle of Loarre</h1><div class="place">Aragón, Spain</div><p>Explore a real-world site, reconstructed and rendered with ElasticRender.</p></div><div class="status" id="status">1080p &nbsp;|&nbsp; Ready</div><div class="controls"><div><kbd>◉</kbd>Drag &nbsp; Rotate camera</div><div><kbd>↕</kbd>Scroll &nbsp; Zoom</div><div><kbd>◉</kbd>Right drag &nbsp; Pan</div></div><div class="error" id="error"></div></div></main>
+</div>
+<script>
+const lambdaUrl='https://k42ls7hhrcfc7lnlftzbdejzui0odfry.lambda-url.eu-west-2.on.aws/';
+const cameras={
+ camera1:[0.974174,0,-0.014282,-0.055994,-0.004531,1.704247,-0.309066,-0.067883,0,0,0,0.01,-0.014424,-0.178459,-0.983842,0.563640],
+ camera2:[0.650398,0,-0.725397,0.040743,0.161630,1.718393,0.144919,-0.236218,0,0,0,0.01,-0.738677,0.125334,-0.662305,0.315036],
+ camera3:[-0.698965,0,-0.678724,0.062357,-1.152657,0.512186,1.187032,-0.085197,0,0,0,0.01,-0.206005,-0.955277,0.212149,0.460692],
+ camera4:[0.924031,0,-0.308846,-0.045320,-0.189948,1.625100,-0.568304,-0.306057,0,0,0,0.01,-0.297425,-0.345953,-0.889862,0.112355]
+};
+const views=[['camera1','West Approach'],['camera2','Main Gate'],['camera3','Upper Ward'],['camera4','East View']];
+const shots=document.getElementById('shots'), image=document.getElementById('render'), status=document.getElementById('status'), error=document.getElementById('error');
+for(const [camera,label] of views){const button=document.createElement('button');button.className='shot';button.innerHTML=`<img src="assets/${camera}.jpg" alt="${label}"><span class="shot-label"><span class="number">${camera.slice(-1)}</span>${label}</span>`;button.onclick=()=>select(camera,button);shots.append(button)}
+async function select(camera,button){document.querySelectorAll('.shot').forEach(x=>x.classList.remove('active'));button.classList.add('active');status.textContent='1080p  |  Rendering…';error.textContent='';try{const response=await fetch(lambdaUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sceneIndex:0,resolution:[1920,1080],cameraMatrix:cameras[camera]})});const envelope=await response.json();if(!response.ok)throw new Error(envelope.errorMessage||`HTTP ${response.status}`);const body=typeof envelope.body==='string'?envelope.body:envelope;const encoded=typeof body==='string'?body:body.body;if(!encoded)throw new Error('No image returned');image.src=encoded.startsWith('data:')?encoded:`data:image/jpeg;base64,${encoded}`;status.textContent='1080p  |  Ready'}catch(e){status.textContent='Render failed';error.textContent=e.message}}
+select('camera1',shots.firstElementChild);
+</script>
+</body></html>
