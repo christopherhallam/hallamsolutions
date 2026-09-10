@@ -449,6 +449,8 @@ const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
 const RENDER_WIDTH = 1920;
 const RENDER_HEIGHT = 1080;
+const MOTION_WIDTH = 960;
+const MOTION_HEIGHT = 540;
 const RENDER_ASPECT = RENDER_WIDTH / RENDER_HEIGHT;
 
 // Photographic viewpoints for the Castle of Loarre photogrammetry scene.
@@ -467,6 +469,7 @@ const cameras = {
 };
 
 const statusEl = document.getElementById('status');
+const frameModeEl = document.getElementById('frameMode');
 const telemetryEl = document.getElementById('telemetry');
 const renderTelemetryEl = document.getElementById('render-telemetry');
 const image = document.getElementById('image');
@@ -585,13 +588,13 @@ function updateRenderTelemetry(headers) {
     `Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
 }
 
-async function issueRender(cameraMatrix) {
+async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT) {
   const id=++requestId;
   try {
     const response=await fetch(lambdaUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sceneIndex,resolution:[RENDER_WIDTH,RENDER_HEIGHT],worldTransform:worldTransform(),viewProjection:cameraMatrix})
+      body:JSON.stringify({sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:cameraMatrix})
     });
     if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
     updateRenderTelemetry(response.headers);
@@ -608,6 +611,7 @@ async function issueRender(cameraMatrix) {
         frameTiming=`${(1000/averageInterval).toFixed(1)} FPS`;
       }
       statusEl.textContent=`Scene ${sceneIndex} · ${frameTiming}`;
+      frameModeEl.textContent=`${width}×${height} · Async · ${ASYNC_FPS} FPS cap`;
     }
   } catch(error) {
     statusEl.textContent=error.message;
@@ -625,11 +629,11 @@ function isMoving() {
 function asyncTick() {
   if(isMoving() || motionQueued) {
     motionQueued=false;
-    settlingFrames=2;
-    issueRender(matrix());
+    settlingFrames=1;
+    issueRender(matrix(),MOTION_WIDTH,MOTION_HEIGHT);
   } else if(settlingFrames>0) {
     settlingFrames--;
-    issueRender(matrix());
+    issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT);
   }
   setTimeout(asyncTick,1000/ASYNC_FPS);
 }
