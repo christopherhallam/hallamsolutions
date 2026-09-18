@@ -591,7 +591,8 @@ function updateRenderTelemetry(headers) {
 
 // BEGIN GOP CLIENT
 const pFramesControl=document.getElementById('enablePFrames');
-let gopSize=15, streamEpoch=0, sentGop=0, nextGopIndex=0, previousState=null;
+const gopSize=15; // Client-owned: one request without prev, then 14 with prev.
+let streamEpoch=0, sentGop=0, nextGopIndex=0, previousState=null;
 let decoder=null, decoderCodec='', activeGop=0, expectedIndex=0;
 const waitingFrames=new Map();
 const failedGops=new Set();
@@ -723,13 +724,12 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,
       signal:AbortSignal.timeout(60000)
     });
     if(!response.ok) throw Error('HTTP '+response.status+': '+await response.text());
-    let headers=response.headers, data, reportedGop;
+    let headers=response.headers, data;
     if((headers.get('Content-Type')||'').includes('json')) {
       const envelope=await response.json();
       if(envelope.statusCode!==200 || !envelope.isBase64Encoded) throw Error('Invalid video response');
       headers=new Headers(envelope.headers || {});
       if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
-      reportedGop=envelope.telemetry?.gopSize;
       data=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
     } else {
       if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
@@ -737,11 +737,6 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,
     }
     if(epoch!==streamEpoch || gop<activeGop) return;
     updateRenderTelemetry(headers);
-    const actualGop=Number(reportedGop || headers.get('X-H264-Gop'));
-    if(Number.isInteger(actualGop) && actualGop>=1 && actualGop<=240 && actualGop!==gopSize) {
-      gopSize=actualGop;
-      previousState=null; nextGopIndex=0; // Next request starts negotiated GOP.
-    }
     document.getElementById('gopInfo').textContent='GOP: '+gopSize+' frames · reference drift may occur';
     const types=nalTypes(data);
     if(index===0 ? !types.includes(5) : (!types.includes(1)||types.includes(5)))
