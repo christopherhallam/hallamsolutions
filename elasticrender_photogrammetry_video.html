@@ -611,7 +611,10 @@ async function queueDecode(data,id) {
       const codec=annexBCodec(item.data);
       if(!decoder || decoder.state==='closed' || codec!==decoderCodec) {
         if(decoder && decoder.state!=='closed') decoder.close();
-        const config={codec,optimizeForLatency:true};
+        const config={codec,optimizeForLatency:true,
+          // The renderer emits full-range (PC-range) I420. Explicitly tell
+          // WebCodecs so it does not expand the stream as limited-range.
+          colorSpace:{primaries:'bt709',transfer:'bt709',matrix:'bt709',fullRange:true}};
         if(!(await VideoDecoder.isConfigSupported(config)).supported) throw Error('Browser does not support this H.264 profile');
         decoder=new VideoDecoder({
           output(frame) {
