@@ -662,6 +662,7 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT)
       const envelope=await response.json();
       if(envelope.statusCode!==200 || !envelope.isBase64Encoded) throw Error('Invalid video response');
       if(envelope.headers?.['Content-Type']!=='video/h264') throw Error('Backend did not return Annex B H.264');
+      updateRenderTelemetry(new Headers({...Object.fromEntries(response.headers.entries()), ...(envelope.headers || {})}));
       data=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
     } else {
       if(!(response.headers.get('Content-Type') || '').includes('video/h264')) throw Error('Backend did not return Annex B H.264; deploy the updated renderer');
