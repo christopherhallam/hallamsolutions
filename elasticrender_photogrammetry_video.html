@@ -379,6 +379,8 @@
         <details>
           <summary>ElasticRender telemetry</summary>
           <div class="debug">
+            <label><input type="checkbox" id="enablePFrames"> Enable P-frames (experimental)</label>
+            <div id="gopInfo">GOP: 15 frames · reference drift may occur</div>
             <div id="telemetry">Client: async, 30 FPS cap · Last frame received: —</div>
             <div id="render-telemetry">Renderer telemetry: —</div>
           </div>
@@ -587,96 +589,167 @@ function updateRenderTelemetry(headers) {
     `Renderer: ${render} ms (raster ${raster} ms) · Encode ${encode} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
 }
 
-let decoder=null, decoderCodec='', decodeBusy=false, pendingDecode=null, latestReceivedId=0;
-// Read the codec profile/compatibility/level from the in-band SPS. Omitting
-// description in VideoDecoderConfig selects Annex B, including SPS/PPS.
+// BEGIN GOP CLIENT
+const pFramesControl=document.getElementById('enablePFrames');
+let gopSize=15, streamEpoch=0, sentGop=0, nextGopIndex=0, previousState=null;
+let decoder=null, decoderCodec='', activeGop=0, expectedIndex=0;
+const waitingFrames=new Map();
+const failedGops=new Set();
+let gapTimer=null;
+
+function closeDecoder() {
+  if(decoder && decoder.state!=='closed') decoder.close();
+  decoder=null; decoderCodec='';
+}
+function resetVideoStream() {
+  ++streamEpoch; previousState=null; nextGopIndex=0; sentGop=0;
+  activeGop=0; expectedIndex=0;
+  waitingFrames.clear(); failedGops.clear();
+  clearTimeout(gapTimer); gapTimer=null; closeDecoder();
+}
+pFramesControl.addEventListener('change',()=>{
+  resetVideoStream();
+  issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT,true);
+});
+function failGop(gop,epoch,message) {
+  if(epoch!==streamEpoch || gop<activeGop) return;
+  failedGops.add(gop);
+  for(const [key,item] of waitingFrames) if(item.gop===gop) waitingFrames.delete(key);
+  if(gop===activeGop) { closeDecoder(); clearTimeout(gapTimer); gapTimer=null; }
+  if(gop===sentGop) {
+    previousState=null; nextGopIndex=0;
+    motionQueued=true; // Restart with an IDR even if movement has stopped.
+  }
+  statusEl.textContent=message;
+}
+function nalTypes(data) {
+  const types=[];
+  for(let i=0;i+3<data.length;++i) {
+    if(data[i] || data[i+1]) continue;
+    const start=data[i+2]===1?i+3:(data[i+2]===0 && data[i+3]===1?i+4:-1);
+    if(start>=0 && start<data.length) { types.push(data[start]&31); i=start; }
+  }
+  return types;
+}
 function annexBCodec(data) {
   for(let i=0;i+7<data.length;++i) {
-    if(data[i]!==0 || data[i+1]!==0) continue;
+    if(data[i] || data[i+1]) continue;
     const start=data[i+2]===1?i+3:(data[i+2]===0 && data[i+3]===1?i+4:-1);
     if(start>=0 && (data[start]&31)===7 && start+3<data.length)
       return 'avc1.'+Array.from(data.subarray(start+1,start+4),b=>b.toString(16).padStart(2,'0')).join('');
   }
-  throw Error('H.264 response has no SPS header');
+  throw Error('H.264 I-frame has no SPS');
 }
-async function queueDecode(data,id) {
-  if(id<latestReceivedId) return;
-  latestReceivedId=id;
-  pendingDecode={data,id}; // Keep only the newest waiting frame under load.
-  if(decodeBusy) return;
-  decodeBusy=true;
-  try {
-    while(pendingDecode) {
-      const item=pendingDecode; pendingDecode=null;
-      const codec=annexBCodec(item.data);
-      if(!decoder || decoder.state==='closed' || codec!==decoderCodec) {
-        if(decoder && decoder.state!=='closed') decoder.close();
-        const config={codec,optimizeForLatency:true,
-          // The renderer emits full-range (PC-range) I420. Explicitly tell
-          // WebCodecs so it does not expand the stream as limited-range.
-          colorSpace:{primaries:'bt709',transfer:'bt709',matrix:'bt709',fullRange:true}};
-        if(!(await VideoDecoder.isConfigSupported(config)).supported) throw Error('Browser does not support this H.264 profile');
-        decoder=new VideoDecoder({
-          output(frame) {
-            try {
-              const id=frame.timestamp;
-              if(id<latestReceivedId || id<displayedId) return;
-              if(image.width!==frame.displayWidth || image.height!==frame.displayHeight) {
-                image.width=frame.displayWidth; image.height=frame.displayHeight;
-              }
-              image.getContext('2d').drawImage(frame,0,0,image.width,image.height);
-              displayedId=id;
-              recordFrameReceived();
-              let timing='— FPS';
-              if(receivedFrames.length>1) timing=`${(1000*(receivedFrames.length-1)/(receivedFrames.at(-1)-receivedFrames[0])).toFixed(1)} FPS`;
-              statusEl.textContent=`Scene ${sceneIndex} · ${timing}`;
-              frameModeEl.textContent=`${image.width}×${image.height} · Async · ${ASYNC_FPS} FPS cap`;
-            } finally { frame.close(); }
-          },
-          error(error) { statusEl.textContent=`H.264 decode: ${error.message}`; }
-        });
-        decoder.configure(config); decoderCodec=codec;
-      }
-      if(item.id<latestReceivedId) continue;
-      decoder.decode(new EncodedVideoChunk({type:'key',timestamp:item.id,data:item.data}));
-      // Deliver even a lone final still frame; does not delay HTTP requests.
-      await decoder.flush();
-    }
-  } finally { decodeBusy=false; }
+function startDecoder(item) {
+  closeDecoder();
+  const epoch=streamEpoch, gop=item.gop, codec=annexBCodec(item.data);
+  decoder=new VideoDecoder({
+    output(frame) {
+      try {
+        if(epoch!==streamEpoch || gop!==activeGop || frame.timestamp<=displayedId) return;
+        if(image.width!==frame.displayWidth || image.height!==frame.displayHeight) {
+          image.width=frame.displayWidth; image.height=frame.displayHeight;
+        }
+        image.getContext('2d').drawImage(frame,0,0,image.width,image.height);
+        displayedId=frame.timestamp;
+        recordFrameReceived();
+        let timing='— FPS';
+        if(receivedFrames.length>1) timing=(1000*(receivedFrames.length-1)/(receivedFrames.at(-1)-receivedFrames[0])).toFixed(1)+' FPS';
+        statusEl.textContent='Scene '+sceneIndex+' · '+timing;
+        frameModeEl.textContent=image.width+'×'+image.height+' · Async · '+ASYNC_FPS+' FPS cap';
+      } finally { frame.close(); }
+    },
+    error(error) { failGop(gop,epoch,'H.264 decode: '+error.message); }
+  });
+  decoder.configure({codec,optimizeForLatency:true,
+    colorSpace:{primaries:'bt709',transfer:'bt709',matrix:'bt709',fullRange:true}});
+  decoderCodec=codec;
 }
-window.addEventListener('pagehide',()=>{
-  pendingDecode=null;
-  if(decoder && decoder.state!=='closed') decoder.close();
-});
-
-async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT) {
-  const id=++requestId;
-  try {
-    if(!window.isSecureContext || !('VideoDecoder' in window)) throw Error('WebCodecs requires a supported browser on HTTPS or localhost');
-    const response=await fetch(lambdaUrl,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({format:'h264',sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:cameraMatrix})
-    });
-    if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
-    updateRenderTelemetry(response.headers);
-    let data;
-    if((response.headers.get('Content-Type') || '').includes('json')) {
-      const envelope=await response.json();
-      if(envelope.statusCode!==200 || !envelope.isBase64Encoded) throw Error('Invalid video response');
-      if(envelope.headers?.['Content-Type']!=='video/h264') throw Error('Backend did not return Annex B H.264');
-      updateRenderTelemetry(new Headers({...Object.fromEntries(response.headers.entries()), ...(envelope.headers || {})}));
-      data=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
-    } else {
-      if(!(response.headers.get('Content-Type') || '').includes('video/h264')) throw Error('Backend did not return Annex B H.264; deploy the updated renderer');
-      data=new Uint8Array(await response.arrayBuffer());
+function queueDecode(item) {
+  if(item.epoch!==streamEpoch || item.gop<activeGop || failedGops.has(item.gop)) return;
+  if(item.index===0) {
+    if(item.gop<=activeGop) return;
+    activeGop=item.gop; expectedIndex=0;
+    for(const [key,old] of waitingFrames) if(old.gop<activeGop) waitingFrames.delete(key);
+    for(const gop of failedGops) if(gop<activeGop) failedGops.delete(gop);
+    startDecoder(item);
+  }
+  waitingFrames.set(item.gop+':'+item.index,item);
+  if(waitingFrames.size>Math.max(32,gopSize*2)) {
+    failGop(sentGop,streamEpoch,'Frame queue full; requesting a new I-frame'); return;
+  }
+  clearTimeout(gapTimer); gapTimer=null;
+  while(decoder && decoder.state==='configured') {
+    const key=activeGop+':'+expectedIndex, next=waitingFrames.get(key);
+    if(!next) break;
+    waitingFrames.delete(key);
+    decoder.decode(new EncodedVideoChunk({type:next.index===0?'key':'delta',timestamp:next.id,data:next.data}));
+    ++expectedIndex;
+    if(next.final) {
+      // flush requires the next chunk to be a keyframe. Only flush at GOP end
+      // or a standalone/final still, never between dependent P-frames.
+      const d=decoder;
+      d.flush().catch(error=>failGop(next.gop,next.epoch,error.message));
+      break;
     }
-    if(id<displayedId) return;
-    await queueDecode(data,id);
-  } catch(error) {
-    statusEl.textContent=error.message;
+  }
+  if(waitingFrames.size) {
+    const epoch=streamEpoch, gop=activeGop;
+    gapTimer=setTimeout(()=>{
+      if(epoch!==streamEpoch || gop!==activeGop) return;
+      failGop(sentGop,epoch,'Missing frame; requesting a new I-frame');
+    },5000);
   }
 }
+window.addEventListener('pagehide',resetVideoStream);
+
+async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,finish=false) {
+  const id=++requestId, epoch=streamEpoch;
+  const state={sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:Array.from(cameraMatrix),instances:[]};
+  const enabled=pFramesControl.checked;
+  const newKey=!enabled || finish || !previousState || nextGopIndex>=gopSize ||
+    previousState.sceneIndex!==sceneIndex || previousState.resolution[0]!==width || previousState.resolution[1]!==height;
+  if(newKey) { sentGop=id; nextGopIndex=0; }
+  const index=nextGopIndex++, gop=sentGop;
+  const payload={format:'h264',...state,gopIndex:index};
+  if(!newKey) payload.prev=previousState;
+  previousState=state; // Only frame state; never recursively include prev.
+  const final=!enabled || finish || index===gopSize-1;
+  if(final) nextGopIndex=gopSize;
+  try {
+    if(!window.isSecureContext || !('VideoDecoder' in window)) throw Error('WebCodecs requires HTTPS or localhost and a supported browser');
+    const response=await fetch(lambdaUrl,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),
+      signal:AbortSignal.timeout(60000)
+    });
+    if(!response.ok) throw Error('HTTP '+response.status+': '+await response.text());
+    let headers=response.headers, data, reportedGop;
+    if((headers.get('Content-Type')||'').includes('json')) {
+      const envelope=await response.json();
+      if(envelope.statusCode!==200 || !envelope.isBase64Encoded) throw Error('Invalid video response');
+      headers=new Headers(envelope.headers || {});
+      if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
+      reportedGop=envelope.telemetry?.gopSize;
+      data=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
+    } else {
+      if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
+      data=new Uint8Array(await response.arrayBuffer());
+    }
+    if(epoch!==streamEpoch || gop<activeGop) return;
+    updateRenderTelemetry(headers);
+    const actualGop=Number(reportedGop || headers.get('X-H264-Gop'));
+    if(Number.isInteger(actualGop) && actualGop>=1 && actualGop<=240 && actualGop!==gopSize) {
+      gopSize=actualGop;
+      previousState=null; nextGopIndex=0; // Next request starts negotiated GOP.
+    }
+    document.getElementById('gopInfo').textContent='GOP: '+gopSize+' frames · reference drift may occur';
+    const types=nalTypes(data);
+    if(index===0 ? !types.includes(5) : (!types.includes(1)||types.includes(5)))
+      throw Error('Unexpected H.264 frame type; check deployed renderer');
+    queueDecode({data,id,epoch,gop,index,final});
+  } catch(error) { failGop(gop,epoch,error.message); }
+}
+// END GOP CLIENT
 
 function noteMovement() {
   motionQueued=true;
@@ -693,7 +766,7 @@ function asyncTick() {
     issueRender(matrix(),MOTION_WIDTH,MOTION_HEIGHT);
   } else if(settlingFrames>0) {
     settlingFrames--;
-    issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT);
+    issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT,true);
   }
   setTimeout(asyncTick,1000/ASYNC_FPS);
 }
@@ -738,6 +811,7 @@ function placeholderThumb(index) {
 }
 
 function selectArtifact(index) {
+  resetVideoStream();
   const artifact=artifacts[index];
   sceneIndex=artifact.sceneIndex;
   orbiting=false;
