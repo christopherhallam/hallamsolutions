@@ -578,13 +578,13 @@ function updateRenderTelemetry(headers) {
   const value=name=>headers.get(name);
   const render=value('X-Render-Ms'),
         raster=value('X-Raster-Ms'),
-        jpeg=value('X-Encode-Ms') || value('X-Jpeg-Encode-Ms'),
+        encode=value('X-Encode-Ms') || value('X-Jpeg-Encode-Ms'),
         base64=value('X-Base64-Encode-Ms'),
         message=value('X-Message-Create-Ms'),
         bytes=value('X-Encoded-Bytes') || value('X-Jpeg-Bytes');
   if(!render) return;
   renderTelemetryEl.textContent =
-    `Renderer: ${render} ms (raster ${raster} ms) · H.264 ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
+    `Renderer: ${render} ms (raster ${raster} ms) · Encode ${encode} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
 }
 
 let decoder=null, decoderCodec='', decodeBusy=false, pendingDecode=null, latestReceivedId=0;
