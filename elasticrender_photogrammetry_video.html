@@ -591,7 +591,7 @@ function updateRenderTelemetry(headers) {
 
 // BEGIN GOP CLIENT
 const pFramesControl=document.getElementById('enablePFrames');
-const gopSize=30; // Client-owned: one request without prev, then 14 with prev.
+const gopSize=15; // Client-owned: one request without prev, then 14 with prev.
 let streamEpoch=0, sentGop=0, nextGopIndex=0, previousState=null;
 let decoder=null, decoderCodec='', activeGop=0, expectedIndex=0;
 const waitingFrames=new Map();
