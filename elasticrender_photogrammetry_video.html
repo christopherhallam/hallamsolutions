@@ -446,7 +446,13 @@
 
 <script>
 // Existing Lambda Function URL from the supplied demo.
-const lambdaUrl = 'https://2l6ziozoccic3lmfd7wuqg2xia0nkqah.lambda-url.eu-west-2.on.aws/';
+const localMode = new URLSearchParams(location.search).get('local') === '1' ||
+  location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const queryEndpoint = new URLSearchParams(location.search).get('endpoint');
+const lambdaUrl = queryEndpoint || (localMode
+  ? `${location.protocol}//${location.hostname}:8080/`
+  : 'https://2l6ziozoccic3lmfd7wuqg2xia0nkqah.lambda-url.eu-west-2.on.aws/');
+console.info('ElasticRender endpoint:', lambdaUrl);
 const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
 const RENDER_WIDTH = 1920;
@@ -729,10 +735,12 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,
       const envelope=await response.json();
       if(envelope.statusCode!==200 || !envelope.isBase64Encoded) throw Error('Invalid video response');
       headers=new Headers(envelope.headers || {});
-      if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
+      if(!(headers.get('Content-Type')||'').toLowerCase().includes('video/h264'))
+        throw Error('Backend did not return H.264 (inner Content-Type: '+(headers.get('Content-Type')||'missing')+')');
       data=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
     } else {
-      if(!(headers.get('Content-Type')||'').includes('video/h264')) throw Error('Backend did not return H.264');
+      if(!(headers.get('Content-Type')||'').toLowerCase().includes('video/h264'))
+        throw Error('Backend did not return H.264 (HTTP Content-Type: '+(headers.get('Content-Type')||'missing')+')');
       data=new Uint8Array(await response.arrayBuffer());
     }
     if(epoch!==streamEpoch || gop<activeGop) return;
