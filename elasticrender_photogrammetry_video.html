@@ -379,7 +379,11 @@
         <details>
           <summary>ElasticRender telemetry</summary>
           <div class="debug">
-            <label><input type="checkbox" id="enablePFrames"> Enable P-frames (experimental)</label>
+            <fieldset class="stream-mode"><legend>Stream mode</legend>
+              <label><input type="radio" name="streamMode" value="mjpeg" checked> MJPEG</label>
+              <label><input type="radio" name="streamMode" value="idr"> H.264 IDR</label>
+              <label><input type="radio" name="streamMode" value="ipp"> H.264</label>
+            </fieldset>
             <div id="gopInfo">GOP: 15 frames · reference drift may occur</div>
             <div id="telemetry">Client: async, 30 FPS cap · Last frame received: —</div>
             <div id="render-telemetry">Renderer telemetry: —</div>
@@ -504,7 +508,7 @@ let lastMove = performance.now();
 let requestId = 0;
 let displayedId = 0;
 let motionQueued = false;
-let settlingFrames = 0;
+let wasMoving = false;
 const receivedFrames = [];
 let lastFrameReceivedAt = 0;
 
@@ -596,7 +600,14 @@ function updateRenderTelemetry(headers) {
 }
 
 // BEGIN GOP CLIENT
-const pFramesControl=document.getElementById('enablePFrames');
+const streamControls=[...document.querySelectorAll('input[name="streamMode"]')];
+const streamMode=()=>streamControls.find(control=>control.checked)?.value||'mjpeg';
+const requestedCodec=new URLSearchParams(location.search).get('codec');
+const codecMode=requestedCodec==='h264idr'?'idr':requestedCodec==='h264'?'ipp':requestedCodec==='mjpeg'?'mjpeg':null;
+if(codecMode) {
+  const control=streamControls.find(item=>item.value===codecMode);
+  if(control) control.checked=true;
+}
 const gopSize=15; // Client-owned: one request without prev, then 14 with prev.
 let streamEpoch=0, sentGop=0, nextGopIndex=0, previousState=null;
 let decoder=null, decoderCodec='', activeGop=0, expectedIndex=0;
@@ -614,10 +625,10 @@ function resetVideoStream() {
   waitingFrames.clear(); failedGops.clear();
   clearTimeout(gapTimer); gapTimer=null; closeDecoder();
 }
-pFramesControl.addEventListener('change',()=>{
+streamControls.forEach(control=>control.addEventListener('change',()=>{
   resetVideoStream();
   issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT,true);
-});
+}));
 function failGop(gop,epoch,message) {
   if(epoch!==streamEpoch || gop<activeGop) return;
   failedGops.add(gop);
@@ -713,12 +724,32 @@ window.addEventListener('pagehide',resetVideoStream);
 async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,finish=false) {
   const id=++requestId, epoch=streamEpoch;
   const state={sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:Array.from(cameraMatrix),instances:[]};
-  const enabled=pFramesControl.checked;
+  const mode=streamMode(), enabled=mode==='ipp';
+  if(mode==='mjpeg') {
+    try {
+      const response=await fetch(lambdaUrl,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...state,format:'jpeg'}),signal:AbortSignal.timeout(60000)});
+      if(!response.ok) throw Error('HTTP '+response.status);
+      let headers=response.headers, blob;
+      if((headers.get('Content-Type')||'').includes('json')) {
+        const envelope=await response.json(); headers=new Headers(envelope.headers||{});
+        blob=new Blob([Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0))],{type:'image/jpeg'});
+      } else blob=await response.blob();
+      if(!headers.get('X-Jpeg-Bytes')) headers.set('X-Jpeg-Bytes',String(blob.size));
+      updateRenderTelemetry(headers);
+      const bitmap=await createImageBitmap(blob);
+      image.width=bitmap.width; image.height=bitmap.height;
+      image.getContext('2d').drawImage(bitmap,0,0); bitmap.close();
+      frameModeEl.textContent=`${image.width}×${image.height} · MJPEG · ${ASYNC_FPS} FPS cap`;
+      recordFrameReceived();
+    } catch(error) { statusEl.textContent=error.message; }
+    return;
+  }
   const newKey=!enabled || finish || !previousState || nextGopIndex>=gopSize ||
     previousState.sceneIndex!==sceneIndex || previousState.resolution[0]!==width || previousState.resolution[1]!==height;
   if(newKey) { sentGop=id; nextGopIndex=0; }
   const index=nextGopIndex++, gop=sentGop;
-  const payload={format:'h264',...state,gopIndex:index};
+  const payload={format:'h264',codecMode:mode==='idr'?'idr':'ipp',...state,gopIndex:index};
   if(!newKey) payload.prev=previousState;
   previousState=state; // Only frame state; never recursively include prev.
   const final=!enabled || finish || index===gopSize-1;
@@ -759,18 +790,23 @@ function noteMovement() {
 }
 
 function isMoving() {
-  return (active || mobileMoving) && keys.size>0;
+  return (active || mobileMoving) && [...keys].some(key=>
+    key==='KeyW' || key==='KeyA' || key==='KeyS' || key==='KeyD');
 }
 
 function asyncTick() {
-  if(isMoving() || motionQueued) {
+  // Mouse/touch freelook does not add a keyboard key, so motionQueued is
+  // part of the active-motion signal.  Consume it only after issuing the
+  // motion-resolution request; the following tick then performs the single
+  // full-resolution settle request.
+  const moving=isMoving() || motionQueued;
+  if(moving) {
     motionQueued=false;
-    settlingFrames=1;
     issueRender(matrix(),MOTION_WIDTH,MOTION_HEIGHT);
-  } else if(settlingFrames>0) {
-    settlingFrames--;
+  } else if(wasMoving) {
     issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT,true);
   }
+  wasMoving=moving;
   setTimeout(asyncTick,1000/ASYNC_FPS);
 }
 asyncTick();
@@ -916,7 +952,8 @@ document.addEventListener('mousemove',event=>{
 document.addEventListener('keydown',event=>{
   if(active) {
     keys.add(event.code);
-    noteMovement();
+    if(event.code==='KeyW' || event.code==='KeyA' || event.code==='KeyS' || event.code==='KeyD')
+      noteMovement();
     event.preventDefault();
   }
 });
