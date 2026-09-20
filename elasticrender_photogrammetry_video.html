@@ -738,6 +738,13 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT,
       if(!headers.get('X-Jpeg-Bytes')) headers.set('X-Jpeg-Bytes',String(blob.size));
       updateRenderTelemetry(headers);
       const bitmap=await createImageBitmap(blob);
+      // Requests are intentionally concurrent.  A slower older response must
+      // never replace a newer frame that has already been displayed.
+      if(id<displayedId) {
+        bitmap.close();
+        return;
+      }
+      displayedId=id;
       image.width=bitmap.width; image.height=bitmap.height;
       image.getContext('2d').drawImage(bitmap,0,0); bitmap.close();
       frameModeEl.textContent=`${image.width}×${image.height} · MJPEG · ${ASYNC_FPS} FPS cap`;
