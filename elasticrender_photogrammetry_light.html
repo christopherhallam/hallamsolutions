@@ -452,6 +452,7 @@ const lambdaUrl = queryEndpoint || (localMode
   : 'https://auwuxhld2jfp3e5ij2f2k6uulu0wcxxc.lambda-url.eu-west-2.on.aws/');
 console.info('ElasticRender endpoint:', lambdaUrl);
 const ASYNC_FPS = 30;
+const LIGHT_FPS = 15;
 const MOVE_SPEED = 2;
 const RENDER_WIDTH = 1920;
 const RENDER_HEIGHT = 1080;
@@ -643,7 +644,7 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT)
         frameTiming=`${(1000/averageInterval).toFixed(1)} FPS`;
       }
       statusEl.textContent=`Scene ${sceneIndex} · ${frameTiming}`;
-      frameModeEl.textContent=`${width}×${height} · Async · ${ASYNC_FPS} FPS cap`;
+      frameModeEl.textContent=`${width}×${height} · Async · ${lightHeld?LIGHT_FPS:ASYNC_FPS} FPS cap`;
     }
   } catch(error) {
     statusEl.textContent=error.message;
@@ -668,7 +669,7 @@ function asyncTick() {
     issueRender(matrix(),RENDER_WIDTH,RENDER_HEIGHT);
   }
   wasMoving=moving;
-  setTimeout(asyncTick,1000/ASYNC_FPS);
+  setTimeout(asyncTick,1000/(lightHeld?LIGHT_FPS:ASYNC_FPS));
 }
 asyncTick();
 
