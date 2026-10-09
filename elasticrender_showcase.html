@@ -432,7 +432,6 @@
       <div class="eyebrow">How it works</div>
       <h2>A renderer with nothing to keep warm.</h2>
       <p>ElasticRender was designed from the start as a stateless CPU renderer for large, detailed scenes such as photogrammetry scans. A request carries everything needed to draw a frame: the scene, the camera and the resolution. Nothing persists between requests, so any instance can render any frame.</p>
-      <p>That design is what made serverless deployment straightforward. Moving the existing renderer onto AWS Lambda, with this browser client, took two days using AI coding agents.</p>
     </div>
     <div class="technology-grid">
       <article>
@@ -441,7 +440,7 @@
       </article>
       <article>
         <h3>Rendering</h3>
-        <p>Hybrid rasterisation and ray tracing, with hand-written SIMD back ends for AVX-512, AVX2 and NEON, plus a scalar path. Shadows are BVH ray traced using 4×4 ray packets. The core has no third-party dependencies.</p>
+        <p>Hybrid rasterisation and ray tracing, with SIMD back ends for AVX-512, AVX2 and NEON, plus a scalar path. Shadows are BVH ray traced using 4×4 ray packets. The core has no third-party dependencies.</p>
       </article>
       <article>
         <h3>Delivery</h3>
