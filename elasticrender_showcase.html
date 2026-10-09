@@ -464,7 +464,7 @@
     <div class="table-scroll">
       <table class="bench">
         <thead>
-          <tr><th>View</th><th>SwiftShader</th><th>Lavapipe</th><th>ElasticRender</th><th>vs SwiftShader</th><th>vs Lavapipe</th></tr>
+          <tr><th>View</th><th>SwiftShader*</th><th>Lavapipe</th><th>ElasticRender</th><th>vs SwiftShader</th><th>vs Lavapipe</th></tr>
         </thead>
         <tbody>
           <tr><td>Camera 1 · West Approach</td><td>16.72 fps</td><td>17.30 fps</td><td class="er">32.19 fps</td><td>1.9×</td><td>1.9×</td></tr>
@@ -474,7 +474,7 @@
         </tbody>
       </table>
     </div>
-    <p class="note">Scene: 732k triangles with a 16k × 16k texture. Hardware: 8 physical cores on a single CCD of an AMD Ryzen 9 7945HX. These are local benchmark figures; the live demo above runs on AWS Lambda with its own budget and a 30 fps cap.</p>
+    <p class="note">Scene: 732k triangles with a 16k × 16k texture. Hardware: 8 physical cores on a single CCD of an AMD Ryzen 9 7945HX. These are local benchmark figures; the live demo above runs on AWS Lambda with its own budget and a 30 fps cap. *SwiftShader textures are capped in Vulkan API at 8k x 8k </p>
   </section>
 
   <section class="content-section" id="telemetry-explained">
