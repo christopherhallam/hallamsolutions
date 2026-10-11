@@ -159,6 +159,18 @@
     margin-top:auto;padding-top:18px;border-top:1px solid var(--line);
     color:var(--muted);font-size:13px;line-height:1.55;
   }
+  .architecture-switch { display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0; }
+  .architecture-switch > span { color:var(--muted);margin-right:2px; }
+  .architecture-switch label {
+    display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border:1px solid var(--line);
+    border-radius:999px;background:rgba(255,255,255,.045);cursor:pointer;color:var(--ink);
+  }
+  .architecture-switch input { accent-color:var(--gold);margin:0; }
+  #architecture-telemetry {
+    display:inline-block;margin-left:4px;white-space:nowrap;
+    color:var(--gold);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  #architecture-value { display:inline-block;width:5ch; }
   kbd {
     background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);
     border-radius:5px;padding:2px 5px;color:#fff;
@@ -415,6 +427,12 @@
         <details open>
           <summary>Live telemetry</summary>
           <div class="debug">
+            <div class="architecture-switch" role="group" aria-label="Renderer architecture">
+              <span>Renderer:</span>
+              <label><input type="radio" name="architecture" value="arm" checked> ARM64</label>
+              <label><input type="radio" name="architecture" value="x86"> x86</label>
+              <span id="architecture-telemetry" aria-live="polite">arch: <span id="architecture-value">ARM64</span> · simd: <span id="simd-value">NEON</span></span>
+            </div>
             <div id="telemetry">Client: async, 30 FPS cap · Last frame received: -</div>
             <div id="render-telemetry">Renderer telemetry: -</div>
           </div>
@@ -525,10 +543,18 @@
 const localMode = new URLSearchParams(location.search).get('local') === '1' ||
   location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const queryEndpoint = new URLSearchParams(location.search).get('endpoint');
-const lambdaUrl = queryEndpoint || (localMode
-  ? `${location.protocol}//${location.hostname}:8080/`
+const localEndpoint = `${location.protocol}//${location.hostname}:8080/`;
+const armLambdaUrl = queryEndpoint || (localMode
+  ? localEndpoint
   : 'https://2l6ziozoccic3lmfd7wuqg2xia0nkqah.lambda-url.eu-west-2.on.aws/');
-console.info('ElasticRender endpoint:', lambdaUrl);
+const x86LambdaUrl = localMode
+  ? localEndpoint
+  : 'https://auwuxhld2jfp3e5ij2f2k6uulu0wcxxc.lambda-url.eu-west-2.on.aws/';
+let selectedArchitecture = 'arm';
+function activeLambdaUrl() {
+  return selectedArchitecture === 'x86' ? x86LambdaUrl : armLambdaUrl;
+}
+console.info('ElasticRender endpoint:', activeLambdaUrl());
 const ASYNC_FPS = 30;
 const MOVE_SPEED = 2;
 const RENDER_WIDTH = 1920;
@@ -556,6 +582,8 @@ const statusEl = document.getElementById('status');
 const frameModeEl = document.getElementById('frameMode');
 const telemetryEl = document.getElementById('telemetry');
 const renderTelemetryEl = document.getElementById('render-telemetry');
+const architectureValueEl = document.getElementById('architecture-value');
+const simdValueEl = document.getElementById('simd-value');
 const image = document.getElementById('image');
 const view = document.getElementById('view');
 const carousel = document.getElementById('carousel');
@@ -675,7 +703,7 @@ function updateRenderTelemetry(headers) {
 async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT) {
   const id=++requestId;
   try {
-    const response=await fetch(lambdaUrl,{
+    const response=await fetch(activeLambdaUrl(),{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:cameraMatrix})
@@ -716,6 +744,20 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT)
     statusEl.textContent=error.message;
   }
 }
+
+document.querySelectorAll('input[name="architecture"]').forEach(input=>{
+  input.addEventListener('change',()=>{
+    if(!input.checked) return;
+    selectedArchitecture=input.value;
+    architectureValueEl.textContent=selectedArchitecture==='arm'?'ARM64':'X64';
+    simdValueEl.textContent=selectedArchitecture==='arm'?'NEON':'AVX2';
+    console.info('ElasticRender endpoint:', activeLambdaUrl());
+    receivedFrames.length=0;
+    lastFrameReceivedAt=0;
+    motionQueued=true;
+    issueRender(matrix());
+  });
+});
 
 function noteMovement() {
   motionQueued=true;
