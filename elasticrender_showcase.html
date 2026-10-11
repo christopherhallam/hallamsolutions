@@ -462,7 +462,7 @@
       </article>
       <article>
         <h3>Delivery</h3>
-        <p>The browser issues concurrent asynchronous requests, capped at 30 fps. Each frame is JPEG encoded and returned as Base64, at 540p while the camera moves and 1080p for static views, on 6 vCPUs per instance.</p>
+        <p>The browser issues concurrent asynchronous requests, capped at 30 fps. Each frame is JPEG encoded and returned as binary, at 540p while the camera moves and 1080p for static views, on 6 vCPUs per instance.</p>
       </article>
     </div>
   </section>
@@ -504,7 +504,6 @@
       <dt>X-Render-Ms</dt><dd>Total time spent producing the frame inside the renderer.</dd>
       <dt>X-Raster-Ms</dt><dd>Time spent in the rasterisation stage.</dd>
       <dt>X-Jpeg-Encode-Ms</dt><dd>Time to encode the finished frame as JPEG.</dd>
-      <dt>X-Base64-Encode-Ms</dt><dd>Time to Base64 encode the JPEG for the Lambda response.</dd>
       <dt>X-Message-Create-Ms</dt><dd>Time to assemble the response message.</dd>
       <dt>X-Jpeg-Bytes</dt><dd>Size of the encoded frame sent back to the browser.</dd>
     </dl>
@@ -692,12 +691,11 @@ function updateRenderTelemetry(headers) {
   const render=value('X-Render-Ms'),
         raster=value('X-Raster-Ms'),
         jpeg=value('X-Jpeg-Encode-Ms'),
-        base64=value('X-Base64-Encode-Ms'),
         message=value('X-Message-Create-Ms'),
         bytes=value('X-Jpeg-Bytes');
   if(!render) return;
   renderTelemetryEl.textContent =
-    `Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Base64 ${base64} ms · Message ${message} ms · ${bytes} bytes`;
+    `Renderer: ${render} ms (raster ${raster} ms) · JPEG ${jpeg} ms · Message ${message} ms · ${bytes} bytes`;
 }
 
 async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT) {
@@ -709,29 +707,33 @@ async function issueRender(cameraMatrix,width=RENDER_WIDTH,height=RENDER_HEIGHT)
       body:JSON.stringify({sceneIndex,resolution:[width,height],worldTransform:worldTransform(),viewProjection:cameraMatrix})
     });
     if(!response.ok) throw Error(`HTTP ${response.status}: ${await response.text()}`);
-    let headers=response.headers;
-    let jpeg;
-    if((headers.get('Content-Type')||'').includes('json')) {
-      const envelope=await response.json();
-      if(envelope.statusCode!==200 || !envelope.isBase64Encoded || !envelope.body)
-        throw Error('Invalid JPEG response envelope');
-      headers=new Headers(envelope.headers || {});
-      if(!(headers.get('Content-Type')||'').includes('image/jpeg'))
-        throw Error('Backend did not return JPEG');
-      const binary=Uint8Array.from(atob(envelope.body),c=>c.charCodeAt(0));
-      jpeg=new Blob([binary],{type:'image/jpeg'});
-    } else {
-      if(!(headers.get('Content-Type')||'').includes('image/jpeg'))
-        throw Error('Backend did not return JPEG');
-      jpeg=await response.blob();
-    }
+    const headers=response.headers;
+    if(!(headers.get('Content-Type')||'').includes('image/jpeg'))
+      throw Error('Backend did not return binary JPEG');
+    const jpeg=await response.blob();
     updateRenderTelemetry(headers);
     recordFrameReceived();
     if(id>=displayedId) {
+      const nextImageUrl=URL.createObjectURL(jpeg);
+      const decodedImage=new Image();
+      decodedImage.src=nextImageUrl;
+      try {
+        await decodedImage.decode();
+      } catch(error) {
+        URL.revokeObjectURL(nextImageUrl);
+        throw error;
+      }
+      // A newer request may have decoded while this one was waiting. Keep
+      // the currently displayed image until the newest usable frame is ready.
+      if(id<displayedId) {
+        URL.revokeObjectURL(nextImageUrl);
+        return;
+      }
       displayedId=id;
-      if(lastImageUrl) URL.revokeObjectURL(lastImageUrl);
-      lastImageUrl=URL.createObjectURL(jpeg);
-      image.src=lastImageUrl;
+      const previousImageUrl=lastImageUrl;
+      lastImageUrl=nextImageUrl;
+      image.src=nextImageUrl;
+      if(previousImageUrl) URL.revokeObjectURL(previousImageUrl);
       let frameTiming='— FPS';
       if(receivedFrames.length>1) {
         const averageInterval=(receivedFrames.at(-1)-receivedFrames[0])/(receivedFrames.length-1);
